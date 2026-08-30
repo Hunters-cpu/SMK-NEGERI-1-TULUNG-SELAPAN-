@@ -1,0 +1,506 @@
+import React, { useState } from 'react';
+import { useApp } from '../context/AppContext';
+import { StudyClub, StudyQuestion } from '../types';
+import { 
+  Users, 
+  HelpCircle, 
+  Plus, 
+  Edit3, 
+  Trash2, 
+  CheckCircle, 
+  MessageSquare, 
+  Send, 
+  Sparkles, 
+  User, 
+  Clock, 
+  BookOpen, 
+  Layers,
+  X
+} from 'lucide-react';
+
+export const StudyClubsView: React.FC = () => {
+  const { 
+    studyClubs, 
+    addStudyClub, 
+    joinStudyClub, 
+    deleteStudyClub, 
+    studyQuestions, 
+    addStudyQuestion, 
+    addQuestionAnswer, 
+    deleteStudyQuestion, 
+    authSession,
+    requestDeleteConfirm,
+    hasAdminScope,
+    showToast
+  } = useApp();
+
+  const [activeTab, setActiveTab] = useState<'clubs' | 'qa'>('clubs');
+
+  // Study Club Modal
+  const [isClubModalOpen, setIsClubModalOpen] = useState<boolean>(false);
+  const [clubForm, setClubForm] = useState({
+    name: '',
+    subject: 'Matematika & Sains',
+    mentorName: authSession.name || 'Guru Pendamping',
+    schedule: 'Rabu & Jumat, 15:30 WIB',
+    location: 'Ruang Laboratorium Komputer / Online Meet',
+    maxMembers: 20,
+    description: ''
+  });
+
+  // QA Form
+  const [isQuestionModalOpen, setIsQuestionModalOpen] = useState<boolean>(false);
+  const [qForm, setQForm] = useState({
+    authorName: authSession.name || 'Siswa',
+    className: '',
+    subject: 'Matematika',
+    questionText: ''
+  });
+
+  const [replyInput, setReplyInput] = useState<{ [id: string]: string }>({});
+
+  const canManage = hasAdminScope('study_clubs') || authSession.role === 'super_admin';
+
+  const handleSaveClub = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!clubForm.name.trim()) return;
+
+    addStudyClub({
+      name: clubForm.name.trim(),
+      subject: clubForm.subject.trim(),
+      mentorName: clubForm.mentorName.trim(),
+      schedule: clubForm.schedule.trim(),
+      location: clubForm.location.trim(),
+      maxMembers: Number(clubForm.maxMembers),
+      description: clubForm.description.trim()
+    });
+
+    setIsClubModalOpen(false);
+    showToast('Kelompok belajar baru berhasil dibuka.', 'success');
+  };
+
+  const handleJoin = (club: StudyClub) => {
+    joinStudyClub(club.id, authSession.name || 'Anggota Siswa');
+    showToast(`Selamat bergabung di kelompok belajar "${club.name}"!`, 'success');
+  };
+
+  const handleSaveQuestion = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!qForm.questionText.trim()) return;
+
+    addStudyQuestion({
+      authorName: qForm.authorName.trim(),
+      className: qForm.className.trim() || 'Siswa',
+      subject: qForm.subject.trim(),
+      questionText: qForm.questionText.trim()
+    });
+
+    setIsQuestionModalOpen(false);
+    setQForm({
+      authorName: authSession.name || 'Siswa',
+      className: '',
+      subject: 'Matematika',
+      questionText: ''
+    });
+    showToast('Pertanyaan Anda telah diajukan ke forum tutor sebaya.', 'success');
+  };
+
+  const handleSendAnswer = (questionId: string) => {
+    const text = replyInput[questionId];
+    if (!text || !text.trim()) return;
+
+    addQuestionAnswer(
+      questionId,
+      authSession.name || 'Tutor Sebaya',
+      authSession.role === 'super_admin' ? 'Guru' : 'Tutor',
+      text.trim()
+    );
+
+    setReplyInput({ ...replyInput, [questionId]: '' });
+    showToast('Jawaban / penjelasan Anda berhasil diposting.', 'success');
+  };
+
+  return (
+    <div className="space-y-8 pb-20 animate-fade-in">
+      {/* Header Banner */}
+      <div className="relative overflow-hidden bg-gradient-to-br from-[#5A5A40] via-[#3E3E2C] to-[#2B2B1E] text-white p-6 sm:p-10 rounded-[32px] shadow-lg">
+        <div className="relative z-10 max-w-3xl space-y-3">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1 bg-white/20 backdrop-blur-md rounded-full text-xs font-bold uppercase tracking-widest text-amber-200">
+            <Users className="w-4 h-4" />
+            <span>Menu 16: Kolaborasi Belajar & Tutor Sebaya</span>
+          </div>
+          <h1 className="font-serif text-2xl sm:text-4xl font-bold tracking-tight">
+            Kelompok Belajar & Forum Tanya Jawab
+          </h1>
+          <p className="text-sm sm:text-base text-white/85 leading-relaxed">
+            Wadah belajar bersama, bimbingan olimpiade, persiapan ujian, serta forum diskusi tanya-jawab PR dan materi sulit antar siswa didampingi guru tutor.
+          </p>
+
+          <div className="pt-2 flex items-center gap-3">
+            <button
+              onClick={() => setActiveTab('clubs')}
+              className={`px-4 py-2 rounded-2xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+                activeTab === 'clubs'
+                  ? 'bg-amber-400 text-[#2D2D2A] shadow-md'
+                  : 'bg-white/20 text-white hover:bg-white/30'
+              }`}
+            >
+              👥 Kelompok Belajar ({(studyClubs || []).length})
+            </button>
+            <button
+              onClick={() => setActiveTab('qa')}
+              className={`px-4 py-2 rounded-2xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+                activeTab === 'qa'
+                  ? 'bg-amber-400 text-[#2D2D2A] shadow-md'
+                  : 'bg-white/20 text-white hover:bg-white/30'
+              }`}
+            >
+              ❓ Forum Tanya Jawab ({(studyQuestions || []).length})
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Tab 1: Study Clubs */}
+      {activeTab === 'clubs' ? (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <h3 className="font-serif text-lg font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">
+              Daftar Kelompok Belajar Aktif
+            </h3>
+            {canManage && (
+              <button
+                onClick={() => setIsClubModalOpen(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-[#5A5A40] hover:bg-[#484833] text-white font-bold rounded-xl text-xs shadow-sm cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Buka Kelompok Baru</span>
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {(studyClubs || []).map(club => {
+              const members = club.members || [];
+              const isJoined = members.includes(authSession.name || '');
+              const isFull = members.length >= club.maxMembers;
+
+              return (
+                <div
+                  key={club.id}
+                  className="bg-white dark:bg-[#1E1E1C] p-6 rounded-[28px] border border-[#E0E0D8] dark:border-[#383832] shadow-sm flex flex-col justify-between space-y-4"
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="px-3 py-1 bg-[#5A5A40]/10 dark:bg-[#5A5A40]/30 text-[#5A5A40] dark:text-[#D1D1BE] text-xs font-bold rounded-full">
+                        {club.subject}
+                      </span>
+                      <span className="text-xs font-semibold text-[#8E8E85]">
+                        {members.length}/{club.maxMembers} Anggota
+                      </span>
+                    </div>
+
+                    <h4 className="font-serif text-lg font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">
+                      {club.name}
+                    </h4>
+
+                    <p className="text-xs text-[#5A5A40] dark:text-[#A4A485] leading-relaxed">
+                      {club.description}
+                    </p>
+
+                    <div className="space-y-1.5 text-xs text-[#8E8E85] pt-2 border-t border-[#E0E0D8]/60 dark:border-[#383832]/60">
+                      <div className="flex items-center gap-1.5">
+                        <User className="w-3.5 h-3.5 text-[#5A5A40]" />
+                        <span>Pembimbing: <strong>{club.mentorName}</strong></span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-[#5A5A40]" />
+                        <span>Jadwal: {club.schedule}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-[#E0E0D8]/60 dark:border-[#383832]/60 flex items-center justify-between">
+                    <button
+                      disabled={isJoined || isFull}
+                      onClick={() => handleJoin(club)}
+                      className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        isJoined
+                          ? 'bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300'
+                          : isFull
+                            ? 'bg-neutral-200 text-neutral-500 cursor-not-allowed'
+                            : 'bg-[#5A5A40] hover:bg-[#484833] text-white shadow-xs'
+                      }`}
+                    >
+                      {isJoined ? '✓ Terdaftar' : isFull ? 'Penuh' : 'Gabung Belajar'}
+                    </button>
+
+                    {canManage && (
+                      <button
+                        onClick={() => {
+                          requestDeleteConfirm({
+                            itemName: `Kelompok "${club.name}"`,
+                            message: `Hapus kelompok belajar ini?`,
+                            onConfirm: () => deleteStudyClub(club.id)
+                          });
+                        }}
+                        className="text-xs text-rose-600 hover:underline font-semibold cursor-pointer"
+                      >
+                        Hapus
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        /* Tab 2: Q&A Forum */
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-serif text-lg font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">
+                Tanya Jawab & Diskusi PR
+              </h3>
+              <p className="text-xs text-[#8E8E85]">Ajukan soal sulit atau bantu jawab pertanyaan teman untuk dapat poin keaktifan.</p>
+            </div>
+            <button
+              onClick={() => setIsQuestionModalOpen(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-[#5A5A40] hover:bg-[#484833] text-white font-bold rounded-xl text-xs shadow-sm cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Tanya Soal Baru</span>
+            </button>
+          </div>
+
+          <div className="space-y-6">
+            {(studyQuestions || []).map(q => (
+              <div
+                key={q.id}
+                className="bg-white dark:bg-[#1E1E1C] p-6 rounded-[28px] border border-[#E0E0D8] dark:border-[#383832] shadow-sm space-y-4"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="px-2.5 py-0.5 bg-amber-100 dark:bg-amber-950/50 text-amber-900 dark:text-amber-200 text-[10px] font-bold rounded-md">
+                        {q.subject}
+                      </span>
+                      <span className="text-xs font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">
+                        {q.authorName} ({q.className})
+                      </span>
+                      <span className="text-[10px] text-[#8E8E85]">• {q.createdAt}</span>
+                    </div>
+                    <p className="text-sm font-semibold text-[#2D2D2A] dark:text-[#ECECE4] mt-2 leading-relaxed">
+                      "{q.questionText}"
+                    </p>
+                  </div>
+
+                  {canManage && (
+                    <button
+                      onClick={() => {
+                        requestDeleteConfirm({
+                          itemName: `Pertanyaan "${q.questionText.slice(0, 30)}..."`,
+                          message: `Hapus pertanyaan ini dari forum?`,
+                          onConfirm: () => deleteStudyQuestion(q.id)
+                        });
+                      }}
+                      className="text-rose-600 hover:underline text-xs cursor-pointer"
+                    >
+                      Hapus
+                    </button>
+                  )}
+                </div>
+
+                {/* Answers list */}
+                <div className="space-y-2.5 pl-4 border-l-2 border-[#5A5A40]/30">
+                  <span className="text-xs font-bold text-[#5A5A40] dark:text-[#A4A485] block">
+                    Diskusi Jawaban ({(q.answers || []).length}):
+                  </span>
+
+                  {(q.answers || []).map(ans => (
+                    <div key={ans.id} className="p-3 bg-[#F8F8F5] dark:bg-[#282825] rounded-xl text-xs space-y-1">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">
+                          {ans.authorName} ({ans.role})
+                        </span>
+                        <span className="text-[#8E8E85]">{ans.createdAt}</span>
+                      </div>
+                      <p className="text-[#5A5A40] dark:text-[#C5C5B0]">{ans.text}</p>
+                    </div>
+                  ))}
+
+                  {/* Reply form */}
+                  <div className="flex items-center gap-2 pt-2">
+                    <input
+                      type="text"
+                      placeholder="Tuliskan jawaban atau penjelasan cara pengerjaan..."
+                      value={replyInput[q.id] || ''}
+                      onChange={e => setReplyInput({ ...replyInput, [q.id]: e.target.value })}
+                      className="flex-1 px-3.5 py-2 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs text-[#2D2D2A] dark:text-[#EAEAE2]"
+                    />
+                    <button
+                      onClick={() => handleSendAnswer(q.id)}
+                      className="px-4 py-2 bg-[#5A5A40] hover:bg-[#484833] text-white text-xs font-bold rounded-xl cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      <span>Jawab</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Club Modal */}
+      {isClubModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white dark:bg-[#1E1E1C] w-full max-w-lg rounded-[28px] border border-[#E0E0D8] dark:border-[#383832] shadow-2xl overflow-hidden animate-scale-in">
+            <div className="p-5 border-b border-[#E0E0D8] dark:border-[#383832] flex items-center justify-between">
+              <h3 className="font-serif text-lg font-bold text-[#2D2D2A] dark:text-[#EAEAE2]">
+                Buka Kelompok Belajar Baru
+              </h3>
+              <button onClick={() => setIsClubModalOpen(false)} className="p-2 text-[#8E8E85] cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleSaveClub} className="p-5 space-y-4">
+              <div>
+                <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">Nama Kelompok *</label>
+                <input
+                  type="text"
+                  required
+                  value={clubForm.name}
+                  onChange={e => setClubForm({ ...clubForm, name: e.target.value })}
+                  placeholder="Contoh: Study Club Olimpiade Fisika & Robotik"
+                  className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">Mata Pelajaran / Topik *</label>
+                  <input
+                    type="text"
+                    required
+                    value={clubForm.subject}
+                    onChange={e => setClubForm({ ...clubForm, subject: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">Kapasitas Maksimal</label>
+                  <input
+                    type="number"
+                    min={5}
+                    max={50}
+                    value={clubForm.maxMembers}
+                    onChange={e => setClubForm({ ...clubForm, maxMembers: Number(e.target.value) })}
+                    className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">Guru / Tutor Pembimbing</label>
+                  <input
+                    type="text"
+                    value={clubForm.mentorName}
+                    onChange={e => setClubForm({ ...clubForm, mentorName: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">Jadwal Pertemuan</label>
+                  <input
+                    type="text"
+                    value={clubForm.schedule}
+                    onChange={e => setClubForm({ ...clubForm, schedule: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">Deskripsi Kegiatan</label>
+                <textarea
+                  rows={3}
+                  value={clubForm.description}
+                  onChange={e => setClubForm({ ...clubForm, description: e.target.value })}
+                  placeholder="Fokus pembahasan soal, bedah modul, dan simulasi try-out..."
+                  className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button type="button" onClick={() => setIsClubModalOpen(false)} className="px-4 py-2 text-xs font-bold text-[#8E8E85]">Batal</button>
+                <button type="submit" className="px-5 py-2 bg-[#5A5A40] text-white text-xs font-bold rounded-xl">Simpan</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Question Modal */}
+      {isQuestionModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white dark:bg-[#1E1E1C] w-full max-w-md rounded-[28px] border border-[#E0E0D8] dark:border-[#383832] shadow-2xl overflow-hidden animate-scale-in">
+            <div className="p-5 border-b border-[#E0E0D8] dark:border-[#383832] flex items-center justify-between">
+              <h3 className="font-serif text-lg font-bold text-[#2D2D2A] dark:text-[#EAEAE2]">
+                Ajukan Pertanyaan Soal
+              </h3>
+              <button onClick={() => setIsQuestionModalOpen(false)} className="p-2 text-[#8E8E85] cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleSaveQuestion} className="p-5 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">Mata Pelajaran *</label>
+                  <input
+                    type="text"
+                    required
+                    value={qForm.subject}
+                    onChange={e => setQForm({ ...qForm, subject: e.target.value })}
+                    placeholder="Matematika / Kimia"
+                    className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">Kelas Anda</label>
+                  <input
+                    type="text"
+                    value={qForm.className}
+                    onChange={e => setQForm({ ...qForm, className: e.target.value })}
+                    placeholder="XII MIPA 2"
+                    className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">Isi Pertanyaan / Soal Sulit *</label>
+                <textarea
+                  required
+                  rows={4}
+                  value={qForm.questionText}
+                  onChange={e => setQForm({ ...qForm, questionText: e.target.value })}
+                  placeholder="Tuliskan bunyi soal lengkap atau bagian materi yang belum dipahami..."
+                  className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button type="button" onClick={() => setIsQuestionModalOpen(false)} className="px-4 py-2 text-xs font-bold text-[#8E8E85]">Batal</button>
+                <button type="submit" className="px-5 py-2 bg-[#5A5A40] text-white text-xs font-bold rounded-xl">Kirim Pertanyaan</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

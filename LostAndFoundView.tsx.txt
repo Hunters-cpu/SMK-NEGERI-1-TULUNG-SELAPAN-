@@ -1,0 +1,355 @@
+import React, { useState } from 'react';
+import { useApp } from '../context/AppContext';
+import { LostFoundItem } from '../types';
+import { 
+  HelpCircle, 
+  Search, 
+  Plus, 
+  Edit3, 
+  Trash2, 
+  CheckCircle, 
+  Clock, 
+  MapPin, 
+  Phone, 
+  Sparkles, 
+  User, 
+  AlertCircle,
+  X
+} from 'lucide-react';
+import { MediaUploadField } from '../components/MediaUploadField';
+
+export const LostAndFoundView: React.FC = () => {
+  const { 
+    lostFoundItems, 
+    addLostFoundItem, 
+    updateLostFoundStatus, 
+    deleteLostFoundItem, 
+    authSession,
+    requestDeleteConfirm,
+    hasAdminScope,
+    showToast
+  } = useApp();
+
+  const [activeType, setActiveType] = useState<string>('Semua');
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+
+  const [form, setForm] = useState({
+    title: '',
+    type: 'Hilang' as LostFoundItem['type'],
+    category: 'Elektronik & Aksesoris',
+    location: '',
+    date: new Date().toISOString().split('T')[0],
+    photoUrl: '',
+    description: '',
+    contactPerson: authSession.name || '',
+    contactPhone: ''
+  });
+
+  const canManage = hasAdminScope('lost_found') || authSession.role === 'super_admin';
+
+  const filteredItems = (lostFoundItems || []).filter(item => {
+    return activeType === 'Semua' || item.type === activeType;
+  });
+
+  const handleOpenAdd = () => {
+    setForm({
+      title: '',
+      type: 'Hilang',
+      category: 'Elektronik & Aksesoris',
+      location: '',
+      date: new Date().toISOString().split('T')[0],
+      photoUrl: '',
+      description: '',
+      contactPerson: authSession.name || '',
+      contactPhone: ''
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.title.trim() || !form.location.trim()) return;
+
+    addLostFoundItem({
+      title: form.title.trim(),
+      type: form.type,
+      category: form.category,
+      location: form.location.trim(),
+      date: form.date,
+      photoUrl: form.photoUrl.trim() || undefined,
+      description: form.description.trim(),
+      contactPerson: form.contactPerson.trim(),
+      contactPhone: form.contactPhone.trim() || undefined
+    });
+
+    setIsModalOpen(false);
+    showToast('Laporan barang hilang / ditemukan berhasil dipublikasikan.', 'success');
+  };
+
+  const handleDelete = (item: LostFoundItem) => {
+    requestDeleteConfirm({
+      itemName: `Laporan "${item.title}"`,
+      message: `Hapus laporan barang ini?`,
+      onConfirm: () => deleteLostFoundItem(item.id)
+    });
+  };
+
+  return (
+    <div className="space-y-8 pb-20 animate-fade-in">
+      {/* Header Banner */}
+      <div className="relative overflow-hidden bg-gradient-to-br from-[#5A5A40] via-[#3E3E2C] to-[#2B2B1E] text-white p-6 sm:p-10 rounded-[32px] shadow-lg">
+        <div className="relative z-10 max-w-3xl space-y-3">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1 bg-white/20 backdrop-blur-md rounded-full text-xs font-bold uppercase tracking-widest text-amber-200">
+            <HelpCircle className="w-4 h-4" />
+            <span>Menu 15: Layanan Barang Hilang & Ditemukan</span>
+          </div>
+          <h1 className="font-serif text-2xl sm:text-4xl font-bold tracking-tight">
+            Barang Hilang & Ditemukan (Lost & Found)
+          </h1>
+          <p className="text-sm sm:text-base text-white/85 leading-relaxed">
+            Pusat informasi barang yang tertinggal atau hilang di lingkungan sekolah (tumbler, jaket, kunci, kartu pelajar, helm, kacamata, dll.). Laporkan barang Anda atau bantu kembalikan milik teman.
+          </p>
+
+          <div className="pt-2">
+            <button
+              onClick={handleOpenAdd}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-amber-400 hover:bg-amber-300 text-[#2D2D2A] font-bold rounded-2xl text-xs sm:text-sm shadow-md transition-transform active:scale-95 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Buat Laporan Baru</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Filter Tabs */}
+      <div className="flex items-center gap-2">
+        {['Semua', 'Hilang', 'Ditemukan'].map(tp => (
+          <button
+            key={tp}
+            onClick={() => setActiveType(tp)}
+            className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
+              activeType === tp
+                ? 'bg-[#5A5A40] text-white shadow-xs'
+                : 'bg-white dark:bg-[#1E1E1C] text-[#8E8E85] border border-[#E0E0D8] dark:border-[#383832]'
+            }`}
+          >
+            {tp === 'Semua' ? 'Semua Laporan' : `Barang ${tp}`}
+          </button>
+        ))}
+      </div>
+
+      {/* Grid of Items */}
+      {filteredItems.length === 0 ? (
+        <div className="text-center py-16 bg-white dark:bg-[#1E1E1C] rounded-3xl border border-[#E0E0D8] dark:border-[#383832] p-8">
+          <HelpCircle className="w-12 h-12 text-[#8E8E85] mx-auto mb-3 opacity-40" />
+          <p className="text-base font-bold text-[#2D2D2A] dark:text-[#EAEAE2]">Tidak ada laporan barang saat ini</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredItems.map(item => {
+            const isLost = item.type === 'Hilang';
+            const isClaimed = item.status === 'Sudah Dikembalikan';
+
+            return (
+              <div
+                key={item.id}
+                className="bg-white dark:bg-[#1E1E1C] rounded-[24px] border border-[#E0E0D8] dark:border-[#383832] shadow-sm overflow-hidden flex flex-col justify-between"
+              >
+                <div>
+                  <div className="relative aspect-[16/10] w-full overflow-hidden bg-neutral-100 dark:bg-neutral-800">
+                    <img
+                      src={item.photoUrl || 'https://images.unsplash.com/photo-1584438784894-089d6a62b8fa?w=400&auto=format&fit=crop&q=80'}
+                      alt={item.title}
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute top-2 left-2 flex items-center gap-1.5">
+                      <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold text-white uppercase ${
+                        isLost ? 'bg-rose-600' : 'bg-emerald-600'
+                      }`}>
+                        {item.type}
+                      </span>
+                      <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold ${
+                        isClaimed ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                      }`}>
+                        {item.status}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="p-5 space-y-2">
+                    <h3 className="font-serif text-base font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">
+                      {item.title}
+                    </h3>
+                    <p className="text-xs text-[#5A5A40] dark:text-[#A4A485] leading-relaxed">
+                      {item.description}
+                    </p>
+
+                    <div className="space-y-1 text-xs text-[#8E8E85] pt-2 border-t border-[#E0E0D8]/60 dark:border-[#383832]/60">
+                      <div className="flex items-center gap-1.5">
+                        <MapPin className="w-3.5 h-3.5 text-[#5A5A40]" />
+                        <span>Lokasi: <strong>{item.location}</strong></span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-[#5A5A40]" />
+                        <span>Tanggal: {item.date}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-[#8C4A32] dark:text-[#E07A5F] font-semibold pt-1">
+                        <User className="w-3.5 h-3.5" />
+                        <span>Kontak: {item.contactPerson} {item.contactPhone ? `(${item.contactPhone})` : ''}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-[#F8F8F5] dark:bg-[#282825] border-t border-[#E0E0D8]/60 dark:border-[#383832]/60 flex items-center justify-between">
+                  {canManage && (
+                    <button
+                      onClick={() => updateLostFoundStatus(item.id, isClaimed ? 'Belum Ditemukan' : 'Sudah Dikembalikan')}
+                      className="px-3 py-1.5 bg-[#5A5A40] hover:bg-[#484833] text-white text-xs font-bold rounded-lg cursor-pointer"
+                    >
+                      {isClaimed ? 'Tandai Belum' : 'Tandai Selesai / Dikembalikan'}
+                    </button>
+                  )}
+
+                  {canManage && (
+                    <button
+                      onClick={() => handleDelete(item)}
+                      className="text-xs text-rose-600 hover:underline font-semibold cursor-pointer ml-auto"
+                    >
+                      Hapus
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Add Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white dark:bg-[#1E1E1C] w-full max-w-lg rounded-[28px] border border-[#E0E0D8] dark:border-[#383832] shadow-2xl overflow-hidden animate-scale-in">
+            <div className="p-5 border-b border-[#E0E0D8] dark:border-[#383832] flex items-center justify-between">
+              <h3 className="font-serif text-lg font-bold text-[#2D2D2A] dark:text-[#EAEAE2]">
+                Laporkan Barang Hilang / Ditemukan
+              </h3>
+              <button onClick={() => setIsModalOpen(false)} className="p-2 text-[#8E8E85] cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">Jenis Laporan *</label>
+                  <select
+                    value={form.type}
+                    onChange={e => setForm({ ...form, type: e.target.value as any })}
+                    className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs font-bold text-[#2D2D2A] dark:text-[#EAEAE2]"
+                  >
+                    <option value="Hilang">Saya Kehilangan Barang</option>
+                    <option value="Ditemukan">Saya Menemukan Barang</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">Kategori Barang</label>
+                  <input
+                    type="text"
+                    value={form.category}
+                    onChange={e => setForm({ ...form, category: e.target.value })}
+                    placeholder="Tumbler / Jaket / Kunci / HP"
+                    className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">Nama / Deskripsi Singkat Barang *</label>
+                <input
+                  type="text"
+                  required
+                  value={form.title}
+                  onChange={e => setForm({ ...form, title: e.target.value })}
+                  placeholder="Contoh: Tumbler Corkcicle Warna Biru Navy"
+                  className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">Perkiraan Lokasi *</label>
+                  <input
+                    type="text"
+                    required
+                    value={form.location}
+                    onChange={e => setForm({ ...form, location: e.target.value })}
+                    placeholder="Contoh: Lapangan Basket / Kantin"
+                    className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">Tanggal</label>
+                  <input
+                    type="date"
+                    value={form.date}
+                    onChange={e => setForm({ ...form, date: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs font-semibold text-[#2D2D2A] dark:text-[#EAEAE2]"
+                  />
+                </div>
+              </div>
+
+              <MediaUploadField
+                label="Foto Barang (URL / Upload)"
+                value={form.photoUrl}
+                onChange={url => setForm({ ...form, photoUrl: url })}
+                placeholder="https://..."
+              />
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">Ciri-Ciri & Deskripsi Lengkap *</label>
+                <textarea
+                  required
+                  rows={3}
+                  value={form.description}
+                  onChange={e => setForm({ ...form, description: e.target.value })}
+                  placeholder="Ciri khusus: stiker anime di bagian tutup, goresan di bawah..."
+                  className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">Nama Pelapor *</label>
+                  <input
+                    type="text"
+                    required
+                    value={form.contactPerson}
+                    onChange={e => setForm({ ...form, contactPerson: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">No. WA / HP</label>
+                  <input
+                    type="tel"
+                    value={form.contactPhone}
+                    onChange={e => setForm({ ...form, contactPhone: e.target.value })}
+                    placeholder="0812-xxxx-xxxx"
+                    className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-xs font-bold text-[#8E8E85]">Batal</button>
+                <button type="submit" className="px-5 py-2 bg-[#5A5A40] text-white text-xs font-bold rounded-xl">Kirim Laporan</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

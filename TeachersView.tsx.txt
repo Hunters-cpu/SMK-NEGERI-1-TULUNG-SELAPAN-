@@ -1,0 +1,592 @@
+import React, { useState } from 'react';
+import { useApp } from '../context/AppContext';
+import { TeacherStaff, TeacherRole } from '../types';
+import { MediaUploadField } from '../components/MediaUploadField';
+import { ScrollEmboss } from '../components/ScrollEmboss';
+import { 
+  GraduationCap, 
+  Search, 
+  Plus, 
+  Edit3, 
+  Trash2, 
+  Mail, 
+  Phone, 
+  Award, 
+  BookOpen, 
+  UserCheck, 
+  X, 
+  Users,
+  Building,
+  Save,
+  User,
+  ArrowLeft
+} from 'lucide-react';
+
+export const TeachersView: React.FC = () => {
+  const { 
+    teachers, 
+    authSession, 
+    addTeacher, 
+    updateTeacher, 
+    deleteTeacher, 
+    requestDeleteConfirm,
+    setCurrentView
+  } = useApp();
+
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [selectedRoleFilter, setSelectedRoleFilter] = useState<string>('Semua');
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [editingTeacher, setEditingTeacher] = useState<TeacherStaff | null>(null);
+
+  // Form State
+  const [formState, setFormState] = useState({
+    name: '',
+    titleWithDegree: '',
+    nip: '',
+    role: 'guru_mapel' as TeacherRole,
+    roleTitle: 'Guru Mata Pelajaran',
+    department: 'MIPA',
+    subjectsText: '',
+    photoUrl: '',
+    bio: '',
+    phone: '',
+    email: ''
+  });
+
+  const categories = [
+    'Semua', 
+    'Pimpinan Sekolah', 
+    'Wakil Kepala Sekolah', 
+    'Guru Mata Pelajaran', 
+    'Tata Usaha & Karyawan'
+  ];
+
+  // Leadership group (kepala sekolah & wakasek)
+  const leadershipTeachers = teachers.filter(t => 
+    t.role === 'kepala_sekolah' || 
+    t.role.startsWith('wakasek') || 
+    t.role === 'wakil_kepala_sekolah'
+  );
+
+  const filteredTeachers = teachers.filter(t => {
+    const matchSearch = t.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        t.titleWithDegree.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        t.roleTitle.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        (t.subjects && t.subjects.some(s => s.toLowerCase().includes(searchTerm.toLowerCase()))) ||
+                        (t.nip && t.nip.includes(searchTerm));
+
+    let matchCategory = true;
+    if (selectedRoleFilter === 'Pimpinan Sekolah') {
+      matchCategory = t.role === 'kepala_sekolah';
+    } else if (selectedRoleFilter === 'Wakil Kepala Sekolah') {
+      matchCategory = t.role.startsWith('wakasek') || t.role === 'wakil_kepala_sekolah';
+    } else if (selectedRoleFilter === 'Guru Mata Pelajaran') {
+      matchCategory = t.role === 'guru_mapel';
+    } else if (selectedRoleFilter === 'Tata Usaha & Karyawan') {
+      matchCategory = t.role === 'staf_tu';
+    }
+
+    return matchSearch && matchCategory;
+  });
+
+  const handleOpenAdd = () => {
+    setEditingTeacher(null);
+    setFormState({
+      name: '',
+      titleWithDegree: '',
+      nip: `19850101${Math.floor(1000000000 + Math.random() * 9000000000)}`,
+      role: 'guru_mapel',
+      roleTitle: 'Guru Mata Pelajaran',
+      department: 'MIPA',
+      subjectsText: '',
+      photoUrl: '',
+      bio: '',
+      phone: '',
+      email: ''
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEdit = (t: TeacherStaff) => {
+    setEditingTeacher(t);
+    setFormState({
+      name: t.name,
+      titleWithDegree: t.titleWithDegree,
+      nip: t.nip || '',
+      role: t.role,
+      roleTitle: t.roleTitle,
+      department: t.department || '',
+      subjectsText: t.subjects ? t.subjects.join(', ') : '',
+      photoUrl: t.photoUrl || '',
+      bio: t.bio || '',
+      phone: t.phone || '',
+      email: t.email || ''
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formState.name.trim() || !formState.roleTitle.trim()) return;
+
+    const subjectsArray = formState.subjectsText
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean);
+
+    if (editingTeacher) {
+      updateTeacher(editingTeacher.id, {
+        name: formState.name.trim(),
+        titleWithDegree: formState.titleWithDegree.trim() || formState.name.trim(),
+        nip: formState.nip.trim() || undefined,
+        role: formState.role,
+        roleTitle: formState.roleTitle.trim(),
+        department: formState.department.trim() || undefined,
+        subjects: subjectsArray,
+        photoUrl: formState.photoUrl.trim() || undefined,
+        bio: formState.bio.trim() || undefined,
+        phone: formState.phone.trim() || undefined,
+        email: formState.email.trim() || undefined
+      });
+    } else {
+      addTeacher({
+        name: formState.name.trim(),
+        titleWithDegree: formState.titleWithDegree.trim() || formState.name.trim(),
+        nip: formState.nip.trim() || undefined,
+        role: formState.role,
+        roleTitle: formState.roleTitle.trim(),
+        department: formState.department.trim() || undefined,
+        subjects: subjectsArray,
+        photoUrl: formState.photoUrl.trim() || undefined,
+        bio: formState.bio.trim() || undefined,
+        phone: formState.phone.trim() || undefined,
+        email: formState.email.trim() || undefined
+      });
+    }
+
+    setIsModalOpen(false);
+  };
+
+  const getInitials = (name: string) => {
+    const parts = name.replace(/^(drs\.|dr\.|dra\.|ir\.|prof\.)/i, '').trim().split(' ').filter(Boolean);
+    if (parts.length === 0) return 'GR';
+    if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  };
+
+  return (
+    <div className="space-y-8 pb-24 text-[#2D2D2A] dark:text-[#EAEAE2]">
+      {/* Banner Header */}
+      <div className="bg-white dark:bg-[#242422] border border-[#E0E0D8] dark:border-[#383832] rounded-[32px] p-6 sm:p-8 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="space-y-2">
+          <button
+            onClick={() => setCurrentView('home')}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#5A5A40] dark:text-[#C5C5B0] hover:underline mb-1 cursor-pointer"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Kembali ke Beranda</span>
+          </button>
+          <div className="inline-flex items-center gap-2 px-3 py-1 bg-[#F5F5F0] dark:bg-[#1E1E1C] text-[#5A5A40] dark:text-[#C5C5B0] text-xs font-bold uppercase tracking-widest rounded-full border border-[#E0E0D8] dark:border-[#383832]">
+            <GraduationCap className="w-3.5 h-3.5 text-[#5A5A40] dark:text-[#C5C5B0]" />
+            <span>Pendidik & Tenaga Kependidikan</span>
+          </div>
+          <h2 className="font-serif text-2xl sm:text-3xl font-bold text-[#2D2D2A] dark:text-[#F0F0EA] tracking-tight">
+            Dewan Guru & Tenaga Kependidikan
+          </h2>
+          <p className="text-[#8E8E85] dark:text-[#A4A49B] text-sm max-w-xl">
+            Mengenal seluruh pimpinan, bapak/ibu dewan guru mata pelajaran, wali kelas, serta staf administrasi tata usaha yang berdedikasi membimbing siswa.
+          </p>
+        </div>
+
+        {authSession.role === 'super_admin' && (
+          <button
+            id="btn-add-teacher"
+            onClick={handleOpenAdd}
+            className="px-5 py-3 rounded-2xl bg-[#5A5A40] dark:bg-[#727252] hover:bg-[#484833] text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer shrink-0 active:scale-95"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Tambah Pendidik / Staf</span>
+          </button>
+        )}
+      </div>
+
+      {/* Filter Tabs */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+        {categories.map(cat => (
+          <button
+            key={cat}
+            onClick={() => setSelectedRoleFilter(cat)}
+            className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+              selectedRoleFilter === cat
+                ? 'bg-[#5A5A40] dark:bg-[#727252] text-white shadow-sm'
+                : 'bg-white dark:bg-[#242422] text-[#8E8E85] dark:text-[#A4A49B] hover:text-[#2D2D2A] dark:hover:text-[#F0F0EA] border border-[#E0E0D8] dark:border-[#383832]'
+            }`}
+          >
+            {cat}
+          </button>
+        ))}
+      </div>
+
+      {/* 🔹 BAGIAN PIMPINAN SEKOLAH (Kepala Sekolah & Para Wakasek) */}
+      {(selectedRoleFilter === 'Semua' || selectedRoleFilter === 'Pimpinan Sekolah' || selectedRoleFilter === 'Wakil Kepala Sekolah') && (
+        <section className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="font-serif text-lg sm:text-xl font-bold text-[#2D2D2A] dark:text-[#F0F0EA] flex items-center gap-2">
+              <Award className="w-5 h-5 text-[#5A5A40] dark:text-[#C5C5B0]" />
+              <span>Pimpinan & Wakil Kepala Sekolah</span>
+            </h3>
+            <span className="text-xs text-[#8E8E85] dark:text-[#A4A49B] font-semibold">Tahun Ajaran 2026/2027</span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+            {leadershipTeachers.map((lead, idx) => (
+              <ScrollEmboss key={lead.id} delay={idx * 50} interactiveHover className="h-full">
+                <div className="h-full bg-white dark:bg-[#242422] border border-[#E0E0D8] dark:border-[#383832] rounded-[28px] p-6 shadow-sm hover:shadow-md transition-all flex flex-col items-center text-center space-y-3 relative group">
+                  {/* Leader Photo / Initials Badge */}
+                  <div className="w-24 h-24 rounded-2xl overflow-hidden border-2 border-[#5A5A40]/30 dark:border-[#727252]/50 bg-[#F5F5F0] dark:bg-[#1E1E1C] shadow-sm shrink-0 flex items-center justify-center">
+                    {lead.photoUrl ? (
+                      <img 
+                        src={lead.photoUrl} 
+                        alt={lead.name} 
+                        className="w-full h-full object-cover" 
+                        loading="lazy"
+                      />
+                    ) : (
+                      <span className="font-serif font-bold text-2xl text-[#5A5A40] dark:text-[#C5C5B0]">
+                        {getInitials(lead.name)}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Title & Position */}
+                  <div className="space-y-1">
+                    <span className="px-2.5 py-0.5 bg-[#F5F5F0] dark:bg-[#1E1E1C] text-[#5A5A40] dark:text-[#C5C5B0] font-bold text-[10px] uppercase tracking-wider rounded-full border border-[#E0E0D8] dark:border-[#383832]">
+                      {lead.roleTitle}
+                    </span>
+                    <h4 className="font-serif text-base font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">{lead.titleWithDegree}</h4>
+                    {lead.nip && <p className="text-[11px] text-[#8E8E85] dark:text-[#A4A49B] font-mono">NIP. {lead.nip}</p>}
+                  </div>
+
+                  {/* Bio / Quote */}
+                  {lead.bio && (
+                    <p className="text-xs text-[#5A5A40] dark:text-[#C5C5B0] italic bg-[#F8F8F5] dark:bg-[#1E1E1C] p-3 rounded-xl border border-[#E0E0D8] dark:border-[#383832] w-full">
+                      "{lead.bio}"
+                    </p>
+                  )}
+
+                  {/* Admin Actions */}
+                  {authSession.role === 'super_admin' && (
+                    <div className="pt-2 border-t border-[#E0E0D8] dark:border-[#383832] flex items-center gap-2 w-full justify-center">
+                      <button
+                        onClick={() => handleOpenEdit(lead)}
+                        className="p-1.5 rounded-lg bg-[#F5F5F0] dark:bg-[#1E1E1C] hover:bg-[#E0E0D8] text-[#2D2D2A] dark:text-[#EAEAE2] text-xs cursor-pointer"
+                        title="Edit"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          requestDeleteConfirm({
+                            itemName: lead.name,
+                            message: `Yakin ingin menghapus ${lead.name}?`,
+                            onConfirm: () => deleteTeacher(lead.id)
+                          });
+                        }}
+                        className="p-1.5 rounded-lg bg-[#8C4A32]/10 hover:bg-[#8C4A32]/20 text-[#8C4A32] text-xs cursor-pointer"
+                        title="Hapus"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </ScrollEmboss>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* 🔹 DAFTAR LENGKAP SEMUA GURU */}
+      <section className="space-y-6 pt-6 border-t border-[#E0E0D8] dark:border-[#383832]">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div>
+            <h3 className="font-serif text-lg sm:text-xl font-bold text-[#2D2D2A] dark:text-[#F0F0EA] flex items-center gap-2">
+              <Users className="w-5 h-5 text-[#5A5A40] dark:text-[#C5C5B0]" />
+              <span>Daftar Guru & Tenaga Kependidikan</span>
+            </h3>
+            <p className="text-xs text-[#8E8E85] dark:text-[#A4A49B]">Total {teachers.length} tenaga pendidik terdaftar</p>
+          </div>
+
+          <div className="relative w-full sm:w-80">
+            <Search className="w-4 h-4 absolute left-3.5 top-3 text-[#8E8E85]" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              placeholder="Cari nama guru / mata pelajaran..."
+              className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-[#242422] border border-[#E0E0D8] dark:border-[#383832] rounded-2xl text-sm text-[#2D2D2A] dark:text-[#F0F0EA] placeholder-[#8E8E85] focus:outline-none focus:border-[#5A5A40]"
+            />
+          </div>
+        </div>
+
+        {filteredTeachers.length === 0 ? (
+          <div className="bg-white dark:bg-[#242422] border border-[#E0E0D8] dark:border-[#383832] rounded-[32px] p-12 text-center text-[#8E8E85] dark:text-[#A4A49B]">
+            <Users className="w-12 h-12 mx-auto mb-3 opacity-40" />
+            <p className="font-serif text-base font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">Tidak ada guru yang sesuai pencarian.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredTeachers.map((teacher, idx) => (
+              <ScrollEmboss key={teacher.id} delay={idx * 30} interactiveHover className="h-full">
+                <div className="h-full bg-white dark:bg-[#242422] border border-[#E0E0D8] dark:border-[#383832] rounded-[28px] p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-4">
+                  <div className="flex items-start gap-4">
+                    {/* Avatar / Initials */}
+                    <div className="w-16 h-16 rounded-2xl overflow-hidden bg-[#F5F5F0] dark:bg-[#1E1E1C] shrink-0 border border-[#E0E0D8] dark:border-[#383832] flex items-center justify-center">
+                      {teacher.photoUrl ? (
+                        <img 
+                          src={teacher.photoUrl} 
+                          alt={teacher.name} 
+                          className="w-full h-full object-cover" 
+                          loading="lazy"
+                        />
+                      ) : (
+                        <span className="font-serif font-bold text-lg text-[#5A5A40] dark:text-[#C5C5B0]">
+                          {getInitials(teacher.name)}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-[#F5F5F0] dark:bg-[#1E1E1C] text-[#5A5A40] dark:text-[#C5C5B0] border border-[#E0E0D8] dark:border-[#383832]">
+                        {teacher.roleTitle}
+                      </span>
+                      <h4 className="font-serif text-base font-bold text-[#2D2D2A] dark:text-[#F0F0EA] mt-1 line-clamp-1">{teacher.titleWithDegree}</h4>
+                      {teacher.nip && (
+                        <p className="text-xs text-[#8E8E85] dark:text-[#A4A49B] font-mono">NIP: {teacher.nip}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Subject & Motto */}
+                  <div className="space-y-2 bg-[#F8F8F5] dark:bg-[#1E1E1C] p-3.5 rounded-2xl border border-[#E0E0D8] dark:border-[#383832] text-xs">
+                    {teacher.subjects && teacher.subjects.length > 0 && (
+                      <div className="flex items-center gap-1.5 text-[#5A5A40] dark:text-[#C5C5B0] font-semibold">
+                        <BookOpen className="w-3.5 h-3.5 shrink-0" />
+                        <span>Pengampu: {teacher.subjects.join(', ')}</span>
+                      </div>
+                    )}
+                    {teacher.bio && (
+                      <p className="text-[#8E8E85] dark:text-[#A4A49B] italic">"{teacher.bio}"</p>
+                    )}
+                  </div>
+
+                  {/* Footer and Admin Controls */}
+                  <div className="pt-2 border-t border-[#E0E0D8] dark:border-[#383832] flex items-center justify-between text-xs text-[#8E8E85]">
+                    <div className="flex items-center gap-3">
+                      {teacher.email && (
+                        <span className="flex items-center gap-1 text-[11px] text-[#8E8E85] dark:text-[#A4A49B] truncate max-w-[150px]">
+                          <Mail className="w-3.5 h-3.5 text-[#8E8E85]" />
+                          {teacher.email}
+                        </span>
+                      )}
+                    </div>
+
+                    {authSession.role === 'super_admin' && (
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEdit(teacher)}
+                          className="p-1.5 rounded-lg bg-[#F5F5F0] dark:bg-[#1E1E1C] hover:bg-[#E0E0D8] text-[#2D2D2A] dark:text-[#EAEAE2] cursor-pointer"
+                          title="Edit Guru"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            requestDeleteConfirm({
+                              itemName: teacher.name,
+                              message: `Yakin ingin menghapus guru ${teacher.name}?`,
+                              onConfirm: () => deleteTeacher(teacher.id)
+                            });
+                          }}
+                          className="p-1.5 rounded-lg bg-[#8C4A32]/10 hover:bg-[#8C4A32]/20 text-[#8C4A32] cursor-pointer"
+                          title="Hapus Guru"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </ScrollEmboss>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* 🔹 ADD / EDIT TEACHER MODAL */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
+          <div className="relative w-full max-w-xl bg-white dark:bg-[#242422] border border-[#E0E0D8] dark:border-[#383832] rounded-[32px] shadow-2xl p-6 sm:p-8 max-h-[90vh] overflow-y-auto text-[#2D2D2A] dark:text-[#EAEAE2]">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E0E0D8] dark:border-[#383832] mb-4">
+              <h3 className="font-serif text-lg font-bold text-[#5A5A40] dark:text-[#C5C5B0]">
+                {editingTeacher ? 'Edit Data Tenaga Pendidik' : 'Tambah Guru / Staf Baru'}
+              </h3>
+              <button onClick={() => setIsModalOpen(false)} className="text-[#8E8E85] hover:text-[#2D2D2A] dark:hover:text-white p-1.5 rounded-xl hover:bg-[#F5F5F0] dark:hover:bg-[#1E1E1C] cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSave} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] dark:text-[#EAEAE2] mb-1">Nama Lengkap *</label>
+                  <input
+                    type="text"
+                    required
+                    value={formState.name}
+                    onChange={e => setFormState({ ...formState, name: e.target.value })}
+                    placeholder="Contoh: Ahmad Fauzi"
+                    className="w-full px-3.5 py-2 bg-[#F8F8F5] dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#383832] rounded-xl text-[#2D2D2A] dark:text-[#F0F0EA] text-sm focus:outline-none focus:border-[#5A5A40]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] dark:text-[#EAEAE2] mb-1">Nama Beserta Gelar *</label>
+                  <input
+                    type="text"
+                    required
+                    value={formState.titleWithDegree}
+                    onChange={e => setFormState({ ...formState, titleWithDegree: e.target.value })}
+                    placeholder="Contoh: Drs. Ahmad Fauzi, M.Pd."
+                    className="w-full px-3.5 py-2 bg-[#F8F8F5] dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#383832] rounded-xl text-[#2D2D2A] dark:text-[#F0F0EA] text-sm focus:outline-none focus:border-[#5A5A40]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] dark:text-[#EAEAE2] mb-1">NIP (Nomor Induk Pegawai)</label>
+                  <input
+                    type="text"
+                    value={formState.nip}
+                    onChange={e => setFormState({ ...formState, nip: e.target.value })}
+                    placeholder="19800101 200501 1 001"
+                    className="w-full px-3.5 py-2 bg-[#F8F8F5] dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#383832] rounded-xl text-[#2D2D2A] dark:text-[#F0F0EA] text-sm focus:outline-none focus:border-[#5A5A40]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] dark:text-[#EAEAE2] mb-1">Kategori Jabatan</label>
+                  <select
+                    value={formState.role}
+                    onChange={e => {
+                      const val = e.target.value as TeacherRole;
+                      let roleTitle = formState.roleTitle;
+                      if (val === 'kepala_sekolah') roleTitle = 'Kepala Sekolah';
+                      else if (val === 'wakasek_kurikulum') roleTitle = 'Wakasek Bidang Kurikulum';
+                      else if (val === 'wakasek_kesiswaan') roleTitle = 'Wakasek Bidang Kesiswaan';
+                      else if (val === 'wakasek_sarpras') roleTitle = 'Wakasek Bidang Sarana & Prasarana';
+                      else if (val === 'wakasek_humas') roleTitle = 'Wakasek Bidang Humas';
+                      else if (val === 'guru_mapel') roleTitle = 'Guru Mata Pelajaran';
+                      else if (val === 'staf_tu') roleTitle = 'Staf Tata Usaha';
+
+                      setFormState({ ...formState, role: val, roleTitle });
+                    }}
+                    className="w-full px-3.5 py-2 bg-[#F8F8F5] dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#383832] rounded-xl text-[#2D2D2A] dark:text-[#F0F0EA] text-sm focus:outline-none focus:border-[#5A5A40]"
+                  >
+                    <option value="kepala_sekolah">Kepala Sekolah</option>
+                    <option value="wakasek_kurikulum">Wakasek Bidang Kurikulum</option>
+                    <option value="wakasek_kesiswaan">Wakasek Bidang Kesiswaan</option>
+                    <option value="wakasek_sarpras">Wakasek Bidang Sarana & Prasarana</option>
+                    <option value="wakasek_humas">Wakasek Bidang Humas</option>
+                    <option value="guru_mapel">Guru Mata Pelajaran</option>
+                    <option value="staf_tu">Staf Tata Usaha</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#2D2D2A] dark:text-[#EAEAE2] mb-1">Jabatan Spesifik / Detail *</label>
+                <input
+                  type="text"
+                  required
+                  value={formState.roleTitle}
+                  onChange={e => setFormState({ ...formState, roleTitle: e.target.value })}
+                  placeholder="Contoh: Wakasek Kurikulum / Guru Matematika Peminatan"
+                  className="w-full px-3.5 py-2 bg-[#F8F8F5] dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#383832] rounded-xl text-[#2D2D2A] dark:text-[#F0F0EA] text-sm focus:outline-none focus:border-[#5A5A40]"
+                />
+              </div>
+
+              <MediaUploadField
+                label="Foto Pendidik / Guru"
+                value={formState.photoUrl}
+                onChange={url => setFormState({ ...formState, photoUrl: url })}
+              />
+
+              <div>
+                <label className="block text-xs font-bold text-[#2D2D2A] dark:text-[#EAEAE2] mb-1">Mata Pelajaran yang Diampu (Pisahkan koma)</label>
+                <input
+                  type="text"
+                  value={formState.subjectsText}
+                  onChange={e => setFormState({ ...formState, subjectsText: e.target.value })}
+                  placeholder="Contoh: Fisika, Matematika Peminatan, Robotika"
+                  className="w-full px-3.5 py-2 bg-[#F8F8F5] dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#383832] rounded-xl text-[#2D2D2A] dark:text-[#F0F0EA] text-sm focus:outline-none focus:border-[#5A5A40]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#2D2D2A] dark:text-[#EAEAE2] mb-1">Kutipan / Moto Pendidik</label>
+                <textarea
+                  rows={2}
+                  value={formState.bio}
+                  onChange={e => setFormState({ ...formState, bio: e.target.value })}
+                  placeholder="Pendidikan adalah lentera penerang masa depan..."
+                  className="w-full px-3.5 py-2 bg-[#F8F8F5] dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#383832] rounded-xl text-[#2D2D2A] dark:text-[#F0F0EA] text-sm focus:outline-none focus:border-[#5A5A40]"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] dark:text-[#EAEAE2] mb-1">Email Resmi</label>
+                  <input
+                    type="email"
+                    value={formState.email}
+                    onChange={e => setFormState({ ...formState, email: e.target.value })}
+                    placeholder="nama.guru@sekolah.sch.id"
+                    className="w-full px-3.5 py-2 bg-[#F8F8F5] dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#383832] rounded-xl text-[#2D2D2A] dark:text-[#F0F0EA] text-sm focus:outline-none focus:border-[#5A5A40]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] dark:text-[#EAEAE2] mb-1">Nomor Telepon / WA</label>
+                  <input
+                    type="text"
+                    value={formState.phone}
+                    onChange={e => setFormState({ ...formState, phone: e.target.value })}
+                    placeholder="+62 812-xxxx-xxxx"
+                    className="w-full px-3.5 py-2 bg-[#F8F8F5] dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#383832] rounded-xl text-[#2D2D2A] dark:text-[#F0F0EA] text-sm focus:outline-none focus:border-[#5A5A40]"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-[#E0E0D8] dark:border-[#383832]">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-5 py-2.5 rounded-xl border border-[#E0E0D8] dark:border-[#383832] text-xs font-bold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 bg-[#5A5A40] text-white rounded-xl text-xs font-bold uppercase shadow-sm"
+                >
+                  Simpan Pendidik
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

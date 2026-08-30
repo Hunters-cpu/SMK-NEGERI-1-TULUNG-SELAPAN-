@@ -1,0 +1,213 @@
+import React, { useState } from 'react';
+import { useApp } from '../context/AppContext';
+import { InternalMessage } from '../types';
+import { 
+  Lock, 
+  Send, 
+  MessageSquare, 
+  Trash2, 
+  Clock, 
+  ShieldCheck, 
+  UserCheck, 
+  Users, 
+  AlertCircle,
+  Sparkles,
+  Inbox
+} from 'lucide-react';
+
+export const InternalMessagesView: React.FC = () => {
+  const { 
+    internalMessages, 
+    addInternalMessage, 
+    deleteInternalMessage, 
+    markInternalMessageAsRead,
+    authSession,
+    requestDeleteConfirm,
+    classes,
+    showToast
+  } = useApp();
+
+  const [recipientRole, setRecipientRole] = useState<'all_teachers' | 'all_admins' | 'super_admin' | 'class_admins'>('all_teachers');
+  const [recipientName, setRecipientName] = useState<string>('Semua Guru & Staf');
+  const [messageText, setMessageText] = useState<string>('');
+
+  const isAnyStaffOrAdmin =
+    authSession.role === 'super_admin' ||
+    authSession.role === 'custom_admin' ||
+    authSession.role === 'class_admin' ||
+    authSession.role === 'eskul_admin';
+
+  if (!isAnyStaffOrAdmin) {
+    return (
+      <div className="text-center py-20 bg-white dark:bg-[#1E1E1C] rounded-3xl border border-[#E0E0D8] dark:border-[#383832] p-8 max-w-lg mx-auto space-y-4">
+        <Lock className="w-12 h-12 text-[#8C4A32] mx-auto opacity-70" />
+        <h2 className="font-serif text-xl font-bold text-[#2D2D2A] dark:text-[#EAEAE2]">
+          Saluran Pesan Khusus Internal Sekolah
+        </h2>
+        <p className="text-xs text-[#8E8E85] leading-relaxed">
+          Halaman ini khusus untuk koordinasi rahasia antara Dewan Guru, Wali Kelas, Pembina Eskul, dan Admin Utama Sekolah. Silakan masuk dengan akun terdaftar untuk mengaksesnya.
+        </p>
+      </div>
+    );
+  }
+
+  const handleSend = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!messageText.trim()) return;
+
+    addInternalMessage({
+      senderName: authSession.name || 'Admin',
+      senderRole: authSession.role,
+      recipientRole,
+      recipientName,
+      message: messageText.trim()
+    });
+
+    setMessageText('');
+    showToast('Pesan internal koordinasi berhasil dikirim.', 'success');
+  };
+
+  const handleDelete = (msg: InternalMessage) => {
+    requestDeleteConfirm({
+      itemName: `Pesan internal dari "${msg.senderName}"`,
+      message: `Hapus pesan internal ini?`,
+      onConfirm: () => deleteInternalMessage(msg.id)
+    });
+  };
+
+  return (
+    <div className="space-y-8 pb-20 animate-fade-in">
+      {/* Header Banner */}
+      <div className="relative overflow-hidden bg-gradient-to-br from-[#2D2D2A] to-[#1A1A18] text-white p-6 sm:p-10 rounded-[32px] shadow-lg border border-white/10">
+        <div className="relative z-10 max-w-3xl space-y-3">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1 bg-white/20 backdrop-blur-md rounded-full text-xs font-bold uppercase tracking-widest text-amber-300">
+            <Lock className="w-4 h-4" />
+            <span>Menu 9: Koordinasi Internal & Rapat</span>
+          </div>
+          <h1 className="font-serif text-2xl sm:text-4xl font-bold tracking-tight">
+            Pesan Internal Sekolah
+          </h1>
+          <p className="text-sm sm:text-base text-white/80 leading-relaxed">
+            Saluran koordinasi tertutup untuk pengumuman mendesak dewan guru, instruksi kurikulum, evaluasi kelas, dan catatan rapat antar pemangku kepentingan sekolah.
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Send Message Panel */}
+        <div className="bg-white dark:bg-[#1E1E1C] p-6 rounded-[28px] border border-[#E0E0D8] dark:border-[#383832] shadow-sm space-y-4 h-fit">
+          <h3 className="font-serif text-base font-bold text-[#2D2D2A] dark:text-[#F0F0EA] pb-3 border-b border-[#E0E0D8] dark:border-[#383832]">
+            Kirim Pesan Koordinasi
+          </h3>
+
+          <form onSubmit={handleSend} className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">
+                Tujuan Penerima *
+              </label>
+              <select
+                value={recipientRole}
+                onChange={e => {
+                  const val = e.target.value as any;
+                  setRecipientRole(val);
+                  if (val === 'all_teachers') setRecipientName('Semua Dewan Guru & Staf');
+                  else if (val === 'super_admin') setRecipientName('Admin Utama (Kepala Sekolah/Owner)');
+                  else if (val === 'class_admins') setRecipientName('Seluruh Wali Kelas / Admin Kelas');
+                  else setRecipientName('Seluruh Tim Administrator');
+                }}
+                className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs font-bold text-[#2D2D2A] dark:text-[#EAEAE2] focus:outline-none"
+              >
+                <option value="all_teachers">Semua Dewan Guru & Staf</option>
+                <option value="super_admin">Admin Utama (Kepala Sekolah / Owner)</option>
+                <option value="class_admins">Seluruh Wali Kelas / Admin Kelas</option>
+                <option value="all_admins">Seluruh Tim Administrator</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">
+                Isi Pesan Koordinasi *
+              </label>
+              <textarea
+                required
+                rows={5}
+                value={messageText}
+                onChange={e => setMessageText(e.target.value)}
+                placeholder="Tuliskan instruksi atau catatan rapat internal..."
+                className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="w-full py-3 bg-[#5A5A40] hover:bg-[#484833] text-white font-bold rounded-xl text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <Send className="w-4 h-4" />
+              <span>Kirim Pesan Internal</span>
+            </button>
+          </form>
+        </div>
+
+        {/* Message Feed */}
+        <div className="lg:col-span-2 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="font-serif text-lg font-bold text-[#2D2D2A] dark:text-[#F0F0EA] flex items-center gap-2">
+              <Inbox className="w-5 h-5 text-[#5A5A40]" />
+              <span>Arsip Komunikasi Internal ({internalMessages.length})</span>
+            </h3>
+          </div>
+
+          {internalMessages.length === 0 ? (
+            <div className="text-center py-16 bg-white dark:bg-[#1E1E1C] rounded-3xl border border-[#E0E0D8] dark:border-[#383832] p-8">
+              <MessageSquare className="w-12 h-12 text-[#8E8E85] mx-auto mb-3 opacity-40" />
+              <p className="text-base font-bold text-[#2D2D2A] dark:text-[#EAEAE2]">Belum ada pesan internal</p>
+              <p className="text-xs text-[#8E8E85] mt-1">Gunakan formulir di sebelah kiri untuk memulai diskusi.</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {internalMessages.map(msg => (
+                <div
+                  key={msg.id}
+                  className="bg-white dark:bg-[#1E1E1C] p-5 rounded-2xl border border-[#E0E0D8] dark:border-[#383832] shadow-xs space-y-3"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-[#5A5A40] text-white flex items-center justify-center font-bold text-xs">
+                        {msg.senderName.charAt(0)}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-xs text-[#2D2D2A] dark:text-[#F0F0EA]">{msg.senderName}</span>
+                          <span className="px-2 py-0.5 bg-[#5A5A40]/10 dark:bg-[#5A5A40]/30 text-[#5A5A40] dark:text-[#D1D1BE] rounded text-[9px] font-bold uppercase">
+                            {msg.senderRole}
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-[#8E8E85] flex items-center gap-1 mt-0.5">
+                          <Clock className="w-3 h-3" />
+                          <span>{msg.createdAt} • Kepada: <strong>{msg.recipientName}</strong></span>
+                        </span>
+                      </div>
+                    </div>
+
+                    {(authSession.role === 'super_admin' || msg.senderName === authSession.name) && (
+                      <button
+                        onClick={() => handleDelete(msg)}
+                        className="text-rose-600 hover:text-rose-700 p-1 cursor-pointer"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+
+                  <p className="text-xs sm:text-sm text-[#2D2D2A] dark:text-[#ECECE4] leading-relaxed bg-[#F8F8F5] dark:bg-[#282825] p-3.5 rounded-xl border border-[#E0E0D8]/60 dark:border-[#383832]/60 whitespace-pre-wrap">
+                    {msg.message}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};

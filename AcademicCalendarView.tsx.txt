@@ -1,0 +1,528 @@
+import React, { useState } from 'react';
+import { useApp } from '../context/AppContext';
+import { AcademicCalendarEvent } from '../types';
+import { getGoogleAccessToken, signInWithGoogle } from '../services/googleAuth';
+import { createGoogleCalendarEvent } from '../services/googleCalendarService';
+import { QRCodeModal, QRCodeData } from '../components/QRCodeModal';
+import { 
+  Calendar as CalendarIcon, 
+  Search, 
+  Filter, 
+  Plus, 
+  Edit3, 
+  Trash2, 
+  Clock, 
+  AlertCircle, 
+  CheckCircle, 
+  Sparkles,
+  BookOpen,
+  Coffee,
+  X,
+  Share2,
+  CalendarCheck,
+  QrCode
+} from 'lucide-react';
+
+export const AcademicCalendarView: React.FC = () => {
+  const { 
+    calendarEvents, 
+    addCalendarEvent, 
+    updateCalendarEvent, 
+    deleteCalendarEvent, 
+    authSession,
+    requestDeleteConfirm,
+    hasAdminScope,
+    schoolInfo,
+    setCurrentView,
+    showToast
+  } = useApp();
+
+  const [syncingEventId, setSyncingEventId] = useState<string | null>(null);
+  const [qrModalData, setQrModalData] = useState<QRCodeData | null>(null);
+
+  const [selectedCategory, setSelectedCategory] = useState<string>('Semua');
+  const [selectedSemester, setSelectedSemester] = useState<string>('Semua');
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [editingItem, setEditingItem] = useState<AcademicCalendarEvent | null>(null);
+
+  const [form, setForm] = useState({
+    title: '',
+    startDate: new Date().toISOString().split('T')[0],
+    endDate: '',
+    category: 'Kegiatan Sekolah',
+    semester: 'Ganjil',
+    description: '',
+    isHoliday: false
+  });
+
+  const canManage = hasAdminScope('calendar_events') || hasAdminScope('calendar' as any) || authSession.role === 'super_admin';
+
+  // Filtered
+  const filteredEvents = calendarEvents.filter(item => {
+    const matchCategory = selectedCategory === 'Semua' || item.category === selectedCategory;
+    const matchSemester = selectedSemester === 'Semua' || (item.semester || 'Ganjil') === selectedSemester;
+    return matchCategory && matchSemester;
+  }).sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+
+  const handleOpenAdd = () => {
+    setEditingItem(null);
+    setForm({
+      title: '',
+      startDate: new Date().toISOString().split('T')[0],
+      endDate: '',
+      category: 'Kegiatan Sekolah',
+      semester: 'Ganjil',
+      description: '',
+      isHoliday: false
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEdit = (item: AcademicCalendarEvent) => {
+    setEditingItem(item);
+    setForm({
+      title: item.title,
+      startDate: item.startDate,
+      endDate: item.endDate || '',
+      category: item.category,
+      semester: item.semester || 'Ganjil',
+      description: item.description || '',
+      isHoliday: !!item.isHoliday || item.category.includes('Libur')
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.title.trim() || !form.startDate.trim()) return;
+
+    if (editingItem) {
+      updateCalendarEvent(editingItem.id, {
+        title: form.title.trim(),
+        startDate: form.startDate,
+        endDate: form.endDate || undefined,
+        category: form.category as any,
+        semester: form.semester,
+        description: form.description.trim() || undefined,
+        isHoliday: form.isHoliday,
+        month: new Date(form.startDate).getMonth() + 1,
+        academicYear: '2026/2027'
+      });
+    } else {
+      addCalendarEvent({
+        title: form.title.trim(),
+        startDate: form.startDate,
+        endDate: form.endDate || undefined,
+        category: form.category as any,
+        semester: form.semester,
+        description: form.description.trim() || undefined,
+        isHoliday: form.isHoliday,
+        month: new Date(form.startDate).getMonth() + 1,
+        academicYear: '2026/2027'
+      });
+    }
+
+    setIsModalOpen(false);
+  };
+
+  const handleDelete = (item: AcademicCalendarEvent) => {
+    requestDeleteConfirm({
+      itemName: `Agenda "${item.title}"`,
+      message: `Yakin ingin menghapus agenda akademik "${item.title}"?`,
+      onConfirm: () => deleteCalendarEvent(item.id)
+    });
+  };
+
+  const getCategoryBadge = (category: string, isHoliday?: boolean) => {
+    if (isHoliday || category.includes('Libur')) {
+      return (
+        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 flex items-center gap-1">
+          <Coffee className="w-3 h-3" />
+          <span>{category}</span>
+        </span>
+      );
+    }
+    if (category.includes('Ujian')) {
+      return (
+        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300">
+          📝 {category}
+        </span>
+      );
+    }
+    if (category.includes('Rapor')) {
+      return (
+        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 dark:bg-purple-950/50 text-purple-800 dark:text-purple-300">
+          📊 {category}
+        </span>
+      );
+    }
+    return (
+      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300">
+        🎯 {category}
+      </span>
+    );
+  };
+
+  const handleSyncSingleToGoogleCalendar = async (event: AcademicCalendarEvent) => {
+    let token = getGoogleAccessToken();
+    if (!token) {
+      try {
+        const authRes = await signInWithGoogle();
+        token = authRes.accessToken;
+      } catch (err: any) {
+        showToast(err.message || 'Gagal menghubungkan Google Workspace.', 'error');
+        return;
+      }
+    }
+
+    setSyncingEventId(event.id);
+    try {
+      await createGoogleCalendarEvent(token, {
+        summary: `[${schoolInfo.name}] ${event.title}`,
+        description: `Kategori: ${event.category}\nSemester: ${event.semester}\n${event.description || ''}\n\nDisinkronkan dari Kalender Sekolah`,
+        location: schoolInfo.name,
+        startDate: event.startDate,
+        endDate: event.endDate || event.startDate,
+        allDay: true
+      });
+      showToast(`Agenda "${event.title}" berhasil disinkronkan ke Google Calendar!`, 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Gagal menyinkronkan ke Google Calendar.', 'error');
+    } finally {
+      setSyncingEventId(null);
+    }
+  };
+
+  return (
+    <div className="space-y-8 pb-20 animate-fade-in">
+      {/* Header Banner */}
+      <div className="relative overflow-hidden bg-gradient-to-br from-[#5A5A40] via-[#484833] to-[#333324] text-white p-6 sm:p-10 rounded-[32px] shadow-lg">
+        <div className="relative z-10 max-w-3xl space-y-3">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1 bg-white/20 backdrop-blur-md rounded-full text-xs font-bold uppercase tracking-widest text-amber-200">
+            <CalendarIcon className="w-4 h-4" />
+            <span>Menu 3: Kalender Akademik 1 Tahun Ajaran</span>
+          </div>
+          <h1 className="font-serif text-2xl sm:text-4xl font-bold tracking-tight">
+            Kalender Akademik Sekolah
+          </h1>
+          <p className="text-sm sm:text-base text-white/85 leading-relaxed">
+            Informasi lengkap agenda pembelajaran, jadwal ujian tengah/akhir semester, penerimaan rapor, hari libur nasional & sekolah, serta kegiatan besar tahun ajaran ini.
+          </p>
+
+          <div className="flex flex-wrap items-center gap-3 pt-2">
+            <button
+              onClick={() => setCurrentView('google_workspace')}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-white text-[#5A5A40] font-bold rounded-2xl text-xs sm:text-sm shadow-md hover:bg-[#F5F5F0] transition-transform active:scale-95 cursor-pointer"
+            >
+              <Sparkles className="w-4 h-4 text-[#5A5A40]" />
+              <span>Buka Google Workspace Hub</span>
+            </button>
+
+            {canManage && (
+              <button
+                onClick={handleOpenAdd}
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-amber-400 hover:bg-amber-300 text-[#2D2D2A] font-bold rounded-2xl text-xs sm:text-sm shadow-md transition-transform active:scale-95 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Tambah Agenda Akademik</span>
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Filter Tabs */}
+      <div className="flex flex-wrap items-center justify-between gap-4 bg-white dark:bg-[#1E1E1C] p-4 rounded-2xl border border-[#E0E0D8] dark:border-[#383832] shadow-xs">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
+          <Filter className="w-4 h-4 text-[#8E8E85] shrink-0" />
+          <span className="text-xs font-bold text-[#5A5A40] dark:text-[#A4A485]">Kategori:</span>
+          {['Semua', 'Kegiatan', 'Ujian', 'Rapor', 'Libur'].map(cat => (
+            <button
+              key={cat}
+              onClick={() => setSelectedCategory(cat)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                selectedCategory === cat
+                  ? 'bg-[#5A5A40] text-white shadow-xs'
+                  : 'bg-[#F5F5F0] dark:bg-[#282825] text-[#8E8E85] hover:text-[#2D2D2A] dark:hover:text-white'
+              }`}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-[#8E8E85]">Semester:</span>
+          <select
+            value={selectedSemester}
+            onChange={e => setSelectedSemester(e.target.value)}
+            className="px-3 py-1.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs font-bold text-[#5A5A40] dark:text-[#EAEAE2] focus:outline-none"
+          >
+            <option value="Semua">Semua Semester</option>
+            <option value="Ganjil">Semester Ganjil</option>
+            <option value="Genap">Semester Genap</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Events Timeline / List */}
+      {filteredEvents.length === 0 ? (
+        <div className="text-center py-16 bg-white dark:bg-[#1E1E1C] rounded-3xl border border-[#E0E0D8] dark:border-[#383832] p-8">
+          <CalendarIcon className="w-12 h-12 text-[#8E8E85] mx-auto mb-3 opacity-40" />
+          <p className="text-base font-bold text-[#2D2D2A] dark:text-[#EAEAE2]">Belum ada agenda akademik</p>
+          <p className="text-xs text-[#8E8E85] mt-1">Pilih kategori lain atau tambahkan agenda baru.</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {filteredEvents.map(event => (
+            <div
+              key={event.id}
+              className={`p-5 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+                event.isHoliday
+                  ? 'bg-rose-50/50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/40'
+                  : 'bg-white dark:bg-[#1E1E1C] border-[#E0E0D8] dark:border-[#383832]'
+              }`}
+            >
+              <div className="flex items-start gap-4">
+                <div className={`w-12 h-12 rounded-2xl flex flex-col items-center justify-center shrink-0 text-white font-bold shadow-xs ${
+                  event.isHoliday ? 'bg-rose-600' : 'bg-[#5A5A40]'
+                }`}>
+                  <span className="text-[10px] uppercase font-extrabold leading-none">
+                    {new Date(event.startDate).toLocaleDateString('id-ID', { month: 'short' })}
+                  </span>
+                  <span className="text-base font-extrabold leading-tight">
+                    {new Date(event.startDate).getDate()}
+                  </span>
+                </div>
+
+                <div className="space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {getCategoryBadge(event.category, event.isHoliday)}
+                    <span className="text-[10px] font-bold text-[#8E8E85] uppercase">
+                      Semester {event.semester}
+                    </span>
+                  </div>
+
+                  <h3 className="font-serif text-base sm:text-lg font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">
+                    {event.title}
+                  </h3>
+
+                  <div className="flex items-center gap-2 text-xs text-[#8E8E85]">
+                    <Clock className="w-3.5 h-3.5 text-[#5A5A40] dark:text-[#A4A485]" />
+                    <span>
+                      {event.startDate} {event.endDate ? `s/d ${event.endDate}` : ''}
+                    </span>
+                  </div>
+
+                  {event.description && (
+                    <p className="text-xs text-[#5A5A40] dark:text-[#A4A485] mt-1">
+                      {event.description}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 shrink-0 self-end sm:self-center border-t sm:border-t-0 pt-2 sm:pt-0 border-[#E0E0D8]/60 dark:border-[#383832]/60">
+                <button
+                  type="button"
+                  onClick={() => setQrModalData({
+                    type: 'event',
+                    id: event.id,
+                    title: event.title,
+                    subtitle: `${event.startDate} ${event.endDate ? `s/d ${event.endDate}` : ''} • Semester ${event.semester}`,
+                    category: event.category
+                  })}
+                  className="px-2.5 py-1.5 text-xs text-[#5A5A40] dark:text-[#D1D1BE] bg-[#F5F5F0] dark:bg-[#282825] hover:bg-[#5A5A40] hover:text-white dark:hover:bg-[#5A5A40] dark:hover:text-white rounded-xl transition-all cursor-pointer flex items-center gap-1.5 font-bold shadow-xs active:scale-95"
+                  title="Buat & Pindai Kode QR Agenda Ini"
+                >
+                  <QrCode className="w-3.5 h-3.5" />
+                  <span>QR Agenda</span>
+                </button>
+
+                <button
+                  onClick={() => handleSyncSingleToGoogleCalendar(event)}
+                  disabled={syncingEventId === event.id}
+                  className="px-2.5 py-1.5 text-xs text-[#5A5A40] dark:text-[#D1D1BE] bg-[#F5F5F0] dark:bg-[#282825] hover:bg-[#EAEAE5] dark:hover:bg-[#33332D] rounded-xl transition-all cursor-pointer flex items-center gap-1.5 font-bold shadow-xs active:scale-95 disabled:opacity-50"
+                  title="Simpan jadwal ini ke Google Calendar Anda"
+                >
+                  {syncingEventId === event.id ? (
+                    <div className="w-3.5 h-3.5 border-2 border-[#5A5A40] border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <CalendarCheck className="w-3.5 h-3.5 text-[#5A5A40] dark:text-[#C5C5B0]" />
+                  )}
+                  <span>+ Google Calendar</span>
+                </button>
+
+                {canManage && (
+                  <>
+                    <button
+                      onClick={() => handleOpenEdit(event)}
+                      className="p-2 text-xs text-[#5A5A40] dark:text-[#D1D1BE] hover:bg-[#F5F5F0] dark:hover:bg-[#282825] rounded-xl transition-colors cursor-pointer flex items-center gap-1 font-semibold"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      <span>Edit</span>
+                    </button>
+                    <button
+                      onClick={() => handleDelete(event)}
+                      className="p-2 text-xs text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl transition-colors cursor-pointer flex items-center gap-1 font-semibold"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Hapus</span>
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add / Edit Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white dark:bg-[#1E1E1C] w-full max-w-lg rounded-[28px] border border-[#E0E0D8] dark:border-[#383832] shadow-2xl overflow-hidden animate-scale-in">
+            <div className="p-5 border-b border-[#E0E0D8] dark:border-[#383832] flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl bg-[#5A5A40] text-white flex items-center justify-center font-bold">
+                  <CalendarIcon className="w-5 h-5" />
+                </div>
+                <h3 className="font-serif text-lg font-bold text-[#2D2D2A] dark:text-[#EAEAE2]">
+                  {editingItem ? 'Edit Agenda Akademik' : 'Tambah Agenda Akademik'}
+                </h3>
+              </div>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="p-2 text-[#8E8E85] hover:text-[#2D2D2A] dark:hover:text-white rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
+              <div>
+                <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">
+                  Nama Agenda / Kegiatan *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={form.title}
+                  onChange={e => setForm({ ...form, title: e.target.value })}
+                  placeholder="Contoh: Penilaian Akhir Semester (PAS) Ganjil"
+                  className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">
+                    Tanggal Mulai *
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={form.startDate}
+                    onChange={e => setForm({ ...form, startDate: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs font-semibold text-[#2D2D2A] dark:text-[#EAEAE2]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">
+                    Tanggal Selesai (Opsional)
+                  </label>
+                  <input
+                    type="date"
+                    value={form.endDate}
+                    onChange={e => setForm({ ...form, endDate: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs font-semibold text-[#2D2D2A] dark:text-[#EAEAE2]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">
+                    Kategori Agenda *
+                  </label>
+                  <select
+                    value={form.category}
+                    onChange={e => setForm({ ...form, category: e.target.value as any })}
+                    className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs font-semibold text-[#2D2D2A] dark:text-[#EAEAE2]"
+                  >
+                    <option value="Kegiatan">Kegiatan Sekolah</option>
+                    <option value="Ujian">Ujian / Asesmen</option>
+                    <option value="Rapor">Pembagian Rapor</option>
+                    <option value="Libur">Libur Sekolah / Semester</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">
+                    Semester *
+                  </label>
+                  <select
+                    value={form.semester}
+                    onChange={e => setForm({ ...form, semester: e.target.value as any })}
+                    className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs font-semibold text-[#2D2D2A] dark:text-[#EAEAE2]"
+                  >
+                    <option value="Ganjil">Semester Ganjil</option>
+                    <option value="Genap">Semester Genap</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 p-3 bg-[#F5F5F0] dark:bg-[#282825] rounded-xl">
+                <input
+                  type="checkbox"
+                  id="isHolidayCheck"
+                  checked={form.isHoliday}
+                  onChange={e => setForm({ ...form, isHoliday: e.target.checked })}
+                  className="w-4 h-4 accent-rose-600 rounded cursor-pointer"
+                />
+                <label htmlFor="isHolidayCheck" className="text-xs font-bold text-[#2D2D2A] dark:text-[#EAEAE2] cursor-pointer">
+                  Tandai sebagai Hari Libur Nasional / Libur Sekolah
+                </label>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">
+                  Keterangan Tambahan
+                </label>
+                <textarea
+                  rows={3}
+                  value={form.description}
+                  onChange={e => setForm({ ...form, description: e.target.value })}
+                  placeholder="Informasi detail bagi siswa, guru, atau orang tua..."
+                  className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2.5 text-xs font-bold text-[#8E8E85] hover:bg-[#F5F5F0] dark:hover:bg-[#282825] rounded-xl cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 bg-[#5A5A40] hover:bg-[#484833] text-white text-xs font-bold rounded-xl shadow-md cursor-pointer"
+                >
+                  {editingItem ? 'Simpan Perubahan' : 'Tambah Agenda'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* 📱 QR CODE MODAL */}
+      <QRCodeModal
+        isOpen={!!qrModalData}
+        onClose={() => setQrModalData(null)}
+        data={qrModalData}
+      />
+    </div>
+  );
+};

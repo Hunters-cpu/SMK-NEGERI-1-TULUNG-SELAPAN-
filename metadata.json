@@ -1,0 +1,6 @@
+{
+  "name": "GALERI KENANGAN SEKOLAH — SMA Negeri 1 Nusantara",
+  "description": "Platform digital arsip kenangan, profil sekolah, media kegiatan, direktori kelas & siswa, struktur guru dan staf untuk SMA Negeri 1 Nusantara.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

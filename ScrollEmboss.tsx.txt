@@ -1,0 +1,114 @@
+import React, { useEffect, useRef, useState } from 'react';
+
+interface ScrollEmbossProps {
+  children: React.ReactNode;
+  className?: string;
+  delay?: number; // Delay in milliseconds (for cascading / staggered riam effect)
+  threshold?: number;
+  direction?: 'up' | 'down' | 'left' | 'right' | 'none';
+  interactiveHover?: boolean;
+}
+
+export const ScrollEmboss: React.FC<ScrollEmbossProps> = ({
+  children,
+  className = '',
+  delay = 0,
+  threshold = 0.05,
+  direction = 'up',
+  interactiveHover = false
+}) => {
+  const domRef = useRef<HTMLDivElement>(null);
+  const [isVisible, setIsVisible] = useState<boolean>(false);
+
+  useEffect(() => {
+    // 1. Initial check directly if element is already within viewport
+    const checkImmediateVisibility = () => {
+      if (domRef.current) {
+        const rect = domRef.current.getBoundingClientRect();
+        const windowHeight = window.innerHeight || document.documentElement.clientHeight;
+        if (rect.top <= windowHeight + 120 && rect.bottom >= -50) {
+          return true;
+        }
+      }
+      return false;
+    };
+
+    if (checkImmediateVisibility()) {
+      if (delay > 0) {
+        const t = setTimeout(() => setIsVisible(true), Math.min(delay, 250));
+        return () => clearTimeout(t);
+      } else {
+        setIsVisible(true);
+        return;
+      }
+    }
+
+    // 2. Safety fallback timer so elements NEVER stay hidden/invisible
+    const safetyTimer = setTimeout(() => {
+      setIsVisible(true);
+    }, Math.min(delay + 300, 500));
+
+    // 3. IntersectionObserver with generous margins
+    let observer: IntersectionObserver | null = null;
+    const currentElem = domRef.current;
+
+    if (typeof IntersectionObserver !== 'undefined' && currentElem) {
+      observer = new IntersectionObserver(
+        entries => {
+          entries.forEach(entry => {
+            if (entry.isIntersecting || entry.intersectionRatio > 0) {
+              if (delay > 0) {
+                setTimeout(() => {
+                  setIsVisible(true);
+                }, Math.min(delay, 250));
+              } else {
+                setIsVisible(true);
+              }
+              if (currentElem && observer) {
+                observer.unobserve(currentElem);
+              }
+            }
+          });
+        },
+        {
+          threshold: [0, 0.05, 0.1],
+          rootMargin: '100px 0px 60px 0px'
+        }
+      );
+
+      observer.observe(currentElem);
+    } else {
+      setIsVisible(true);
+    }
+
+    return () => {
+      clearTimeout(safetyTimer);
+      if (observer && currentElem) {
+        observer.unobserve(currentElem);
+      }
+    };
+  }, [delay, threshold]);
+
+  let transformInitial = 'translateY(24px) scale(0.98) rotateX(3deg)';
+  if (direction === 'left') transformInitial = 'translateX(-24px) scale(0.98)';
+  if (direction === 'right') transformInitial = 'translateX(24px) scale(0.98)';
+  if (direction === 'down') transformInitial = 'translateY(-24px) scale(0.98)';
+  if (direction === 'none') transformInitial = 'scale(0.97)';
+
+  return (
+    <div
+      ref={domRef}
+      className={`transition-all duration-600 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+        interactiveHover ? 'riam-card-hover' : ''
+      } ${className}`}
+      style={{
+        opacity: isVisible ? 1 : 0.05,
+        transform: isVisible ? 'translate(0) scale(1) rotateX(0deg)' : `perspective(1000px) ${transformInitial}`,
+        willChange: 'transform, opacity'
+      }}
+    >
+      {children}
+    </div>
+  );
+};
+

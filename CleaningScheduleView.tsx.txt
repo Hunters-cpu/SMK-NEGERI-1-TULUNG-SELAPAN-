@@ -1,0 +1,329 @@
+import React, { useState } from 'react';
+import { useApp } from '../context/AppContext';
+import { CleaningDutyGroup } from '../types';
+import { 
+  Sparkles, 
+  Plus, 
+  Edit3, 
+  Trash2, 
+  CheckCircle, 
+  Calendar, 
+  User, 
+  Layers, 
+  ShieldCheck,
+  X
+} from 'lucide-react';
+
+export const CleaningScheduleView: React.FC = () => {
+  const { 
+    cleaningDutyGroups, 
+    addCleaningDutyGroup, 
+    updateCleaningDutyGroup, 
+    deleteCleaningDutyGroup, 
+    classes,
+    authSession,
+    requestDeleteConfirm,
+    hasAdminScope
+  } = useApp();
+
+  const [selectedClass, setSelectedClass] = useState<string>('Semua');
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [editingItem, setEditingItem] = useState<CleaningDutyGroup | null>(null);
+
+  const [form, setForm] = useState({
+    className: classes[0]?.name || 'XII MIPA 1',
+    day: 'Senin' as CleaningDutyGroup['day'],
+    membersText: '',
+    coordinator: '',
+    tasksText: 'Menyapu lantai, mengepel teras, membersihkan papan tulis, membuang sampah'
+  });
+
+  const canManage = hasAdminScope('cleaning_schedule') || authSession.role === 'super_admin' || authSession.role === 'class_admin';
+
+  const daysOrder: CleaningDutyGroup['day'][] = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+
+  const filteredGroups = (cleaningDutyGroups || []).filter(g => {
+    return selectedClass === 'Semua' || g.className === selectedClass;
+  });
+
+  const handleOpenAdd = () => {
+    setEditingItem(null);
+    setForm({
+      className: classes[0]?.name || 'XII MIPA 1',
+      day: 'Senin',
+      membersText: '',
+      coordinator: '',
+      tasksText: 'Menyapu lantai, membersihkan papan tulis, buang sampah'
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEdit = (item: CleaningDutyGroup) => {
+    setEditingItem(item);
+    setForm({
+      className: item.className,
+      day: item.day,
+      membersText: item.members.join(', '),
+      coordinator: item.coordinator,
+      tasksText: item.tasks.join(', ')
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.membersText.trim()) return;
+
+    const members = form.membersText.split(',').map(s => s.trim()).filter(Boolean);
+    const tasks = form.tasksText.split(',').map(s => s.trim()).filter(Boolean);
+
+    if (editingItem) {
+      updateCleaningDutyGroup(editingItem.id, {
+        className: form.className.trim(),
+        day: form.day,
+        members,
+        coordinator: form.coordinator.trim() || members[0] || 'Koordinator',
+        tasks: tasks.length ? tasks : ['Menyapu lantai', 'Membersihkan papan tulis']
+      });
+    } else {
+      addCleaningDutyGroup({
+        className: form.className.trim(),
+        day: form.day,
+        members,
+        coordinator: form.coordinator.trim() || members[0] || 'Koordinator',
+        tasks: tasks.length ? tasks : ['Menyapu lantai', 'Membersihkan papan tulis']
+      });
+    }
+
+    setIsModalOpen(false);
+  };
+
+  const handleDelete = (item: CleaningDutyGroup) => {
+    requestDeleteConfirm({
+      itemName: `Piket ${item.day} (${item.className})`,
+      message: `Hapus kelompok piket ${item.day} kelas ${item.className}?`,
+      onConfirm: () => deleteCleaningDutyGroup(item.id)
+    });
+  };
+
+  return (
+    <div className="space-y-8 pb-20 animate-fade-in">
+      {/* Header Banner */}
+      <div className="relative overflow-hidden bg-gradient-to-br from-[#5A5A40] via-[#3E3E2C] to-[#2B2B1E] text-white p-6 sm:p-10 rounded-[32px] shadow-lg">
+        <div className="relative z-10 max-w-3xl space-y-3">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1 bg-white/20 backdrop-blur-md rounded-full text-xs font-bold uppercase tracking-widest text-amber-200">
+            <Sparkles className="w-4 h-4" />
+            <span>Menu 18: Kebersihan & Kedisiplinan Kelas</span>
+          </div>
+          <h1 className="font-serif text-2xl sm:text-4xl font-bold tracking-tight">
+            Jadwal Piket Kebersihan Kelas
+          </h1>
+          <p className="text-sm sm:text-base text-white/85 leading-relaxed">
+            Pembagian giliran regu kerja piket harian tiap kelas (Senin s.d. Sabtu) demi menjaga kenyamanan, kerapian, dan kebersihan ruang belajar sekolah.
+          </p>
+
+          {canManage && (
+            <div className="pt-2">
+              <button
+                onClick={handleOpenAdd}
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-amber-400 hover:bg-amber-300 text-[#2D2D2A] font-bold rounded-2xl text-xs sm:text-sm shadow-md transition-transform active:scale-95 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Tambah Regu Piket</span>
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Filter by Class */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+        <button
+          onClick={() => setSelectedClass('Semua')}
+          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
+            selectedClass === 'Semua'
+              ? 'bg-[#5A5A40] text-white shadow-xs'
+              : 'bg-white dark:bg-[#1E1E1C] text-[#8E8E85] border border-[#E0E0D8] dark:border-[#383832]'
+          }`}
+        >
+          Semua Kelas
+        </button>
+        {classes.map(cls => (
+          <button
+            key={cls.id}
+            onClick={() => setSelectedClass(cls.name)}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
+              selectedClass === cls.name
+                ? 'bg-[#5A5A40] text-white shadow-xs'
+                : 'bg-white dark:bg-[#1E1E1C] text-[#8E8E85] border border-[#E0E0D8] dark:border-[#383832]'
+            }`}
+          >
+            {cls.name}
+          </button>
+        ))}
+      </div>
+
+      {/* Day Columns or Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {daysOrder.map(day => {
+          const dayGroups = filteredGroups.filter(g => g.day === day);
+          if (dayGroups.length === 0) return null;
+
+          return (
+            <div key={day} className="space-y-4">
+              <div className="flex items-center gap-2 pb-2 border-b-2 border-[#5A5A40]/30">
+                <Calendar className="w-4 h-4 text-[#5A5A40]" />
+                <h3 className="font-serif text-lg font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">
+                  Hari {day}
+                </h3>
+              </div>
+
+              <div className="space-y-4">
+                {dayGroups.map(group => (
+                  <div
+                    key={group.id}
+                    className="bg-white dark:bg-[#1E1E1C] p-5 rounded-[24px] border border-[#E0E0D8] dark:border-[#383832] shadow-sm space-y-3"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="px-2.5 py-0.5 bg-[#5A5A40]/10 dark:bg-[#5A5A40]/30 text-[#5A5A40] dark:text-[#D1D1BE] text-xs font-bold rounded-md">
+                        {group.className}
+                      </span>
+                      <span className="text-[11px] text-[#8C4A32] dark:text-[#E07A5F] font-semibold">
+                        PJ: <strong>{group.coordinator}</strong>
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] font-bold uppercase text-[#8E8E85] block mb-1">
+                        Anggota Regu ({(group.members || []).length} Siswa):
+                      </span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(group.members || []).map((m, i) => (
+                          <span
+                            key={i}
+                            className="px-2 py-0.5 bg-[#F5F5F0] dark:bg-[#282825] text-xs font-semibold text-[#2D2D2A] dark:text-[#ECECE4] rounded-md border border-[#E0E0D8]/60 dark:border-[#383832]/60"
+                          >
+                            {m}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-[#E0E0D8]/60 dark:border-[#383832]/60">
+                      <span className="text-[10px] font-bold uppercase text-[#8E8E85] block mb-1">
+                        Tugas Piket:
+                      </span>
+                      <ul className="text-xs text-[#5A5A40] dark:text-[#C5C5B0] space-y-0.5 list-disc list-inside">
+                        {(group.tasks || []).map((t, idx) => (
+                          <li key={idx}>{t}</li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    {canManage && (
+                      <div className="pt-2 border-t border-[#E0E0D8]/60 dark:border-[#383832]/60 flex items-center justify-end gap-3 text-xs font-semibold">
+                        <button onClick={() => handleOpenEdit(group)} className="text-[#5A5A40] dark:text-[#D1D1BE] hover:underline cursor-pointer">
+                          Edit
+                        </button>
+                        <button onClick={() => handleDelete(group)} className="text-rose-600 hover:underline cursor-pointer">
+                          Hapus
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white dark:bg-[#1E1E1C] w-full max-w-md rounded-[28px] border border-[#E0E0D8] dark:border-[#383832] shadow-2xl overflow-hidden animate-scale-in">
+            <div className="p-5 border-b border-[#E0E0D8] dark:border-[#383832] flex items-center justify-between">
+              <h3 className="font-serif text-lg font-bold text-[#2D2D2A] dark:text-[#EAEAE2]">
+                {editingItem ? 'Edit Regu Piket' : 'Tambah Regu Piket Kelas'}
+              </h3>
+              <button onClick={() => setIsModalOpen(false)} className="p-2 text-[#8E8E85] cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleSubmit} className="p-5 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">Kelas *</label>
+                  <select
+                    value={form.className}
+                    onChange={e => setForm({ ...form, className: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs font-bold text-[#2D2D2A] dark:text-[#EAEAE2]"
+                  >
+                    {classes.map(c => (
+                      <option key={c.id} value={c.name}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">Hari Piket *</label>
+                  <select
+                    value={form.day}
+                    onChange={e => setForm({ ...form, day: e.target.value as any })}
+                    className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs font-bold text-[#2D2D2A] dark:text-[#EAEAE2]"
+                  >
+                    {daysOrder.map(d => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">Koordinator / PJ Piket</label>
+                <input
+                  type="text"
+                  value={form.coordinator}
+                  onChange={e => setForm({ ...form, coordinator: e.target.value })}
+                  placeholder="Nama ketua regu piket"
+                  className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">
+                  Nama Anggota Siswa (Pisahkan dengan koma) *
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  value={form.membersText}
+                  onChange={e => setForm({ ...form, membersText: e.target.value })}
+                  placeholder="Andi, Budi, Cindy, Dodi, Eka"
+                  className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">
+                  Tugas Khusus (Pisahkan dengan koma)
+                </label>
+                <input
+                  type="text"
+                  value={form.tasksText}
+                  onChange={e => setForm({ ...form, tasksText: e.target.value })}
+                  placeholder="Menyapu, mengepel, menghapus papan tulis, buang sampah"
+                  className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-xs font-bold text-[#8E8E85]">Batal</button>
+                <button type="submit" className="px-5 py-2 bg-[#5A5A40] text-white text-xs font-bold rounded-xl">Simpan</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

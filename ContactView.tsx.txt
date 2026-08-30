@@ -1,0 +1,369 @@
+import React, { useState } from 'react';
+import { useApp } from '../context/AppContext';
+import { 
+  Mail, 
+  Phone, 
+  MapPin, 
+  Globe, 
+  Send, 
+  MessageSquare, 
+  CheckCircle, 
+  Clock, 
+  Shield, 
+  Building2,
+  Trash2,
+  Reply,
+  Sparkles
+} from 'lucide-react';
+import { TikTokIcon } from '../components/TikTokIcon';
+
+export const ContactView: React.FC = () => {
+  const { 
+    schoolInfo, 
+    contactMessages, 
+    addContactMessage, 
+    replyContactMessage, 
+    deleteContactMessage, 
+    authSession,
+    requestDeleteConfirm,
+    hasAdminScope,
+    showToast
+  } = useApp();
+
+  const [form, setForm] = useState({
+    senderName: '',
+    senderEmail: '',
+    senderPhone: '',
+    subject: '',
+    message: ''
+  });
+
+  const [replyInput, setReplyInput] = useState<{ [id: string]: string }>({});
+
+  const canManage = hasAdminScope('contact') || authSession.role === 'super_admin';
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.senderName.trim() || !form.message.trim()) return;
+
+    addContactMessage({
+      senderName: form.senderName.trim(),
+      senderEmail: form.senderEmail.trim(),
+      senderPhone: form.senderPhone.trim() || undefined,
+      subject: form.subject.trim(),
+      message: form.message.trim()
+    });
+
+    setForm({
+      senderName: '',
+      senderEmail: '',
+      senderPhone: '',
+      subject: '',
+      message: ''
+    });
+
+    showToast('Pesan Anda telah berhasil dikirim ke pihak sekolah. Terima kasih!', 'success');
+  };
+
+  const handleReply = (id: string) => {
+    const text = replyInput[id];
+    if (!text || !text.trim()) return;
+    replyContactMessage(id, text.trim());
+    setReplyInput({ ...replyInput, [id]: '' });
+    showToast('Balasan resmi telah disimpan.', 'success');
+  };
+
+  const handleDelete = (id: string, name: string) => {
+    requestDeleteConfirm({
+      itemName: `Pesan dari "${name}"`,
+      message: `Hapus pesan dari "${name}"?`,
+      onConfirm: () => deleteContactMessage(id)
+    });
+  };
+
+  return (
+    <div className="space-y-8 pb-20 animate-fade-in">
+      {/* Header Banner */}
+      <div className="relative overflow-hidden bg-gradient-to-br from-[#5A5A40] to-[#3E3E2C] text-white p-6 sm:p-10 rounded-[32px] shadow-lg">
+        <div className="relative z-10 max-w-3xl space-y-3">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1 bg-white/20 backdrop-blur-md rounded-full text-xs font-bold uppercase tracking-widest text-amber-200">
+            <Mail className="w-4 h-4" />
+            <span>Menu 8: Kontak & Saluran Aspirasi</span>
+          </div>
+          <h1 className="font-serif text-2xl sm:text-4xl font-bold tracking-tight">
+            Hubungi Sekolah & Kirim Pesan
+          </h1>
+          <p className="text-sm sm:text-base text-white/85 leading-relaxed">
+            Pusat komunikasi resmi sekolah, alamat kampus, layanan telepon tata usaha, media sosial, serta formulir pengiriman pertanyaan atau saran langsung bagi wali murid dan masyarakat.
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Left Column: School Contact Info */}
+        <div className="space-y-6">
+          <div className="bg-white dark:bg-[#1E1E1C] p-6 rounded-[28px] border border-[#E0E0D8] dark:border-[#383832] shadow-sm space-y-5">
+            <h3 className="font-serif text-lg font-bold text-[#2D2D2A] dark:text-[#F0F0EA] pb-3 border-b border-[#E0E0D8] dark:border-[#383832]">
+              Informasi Kontak Resmi
+            </h3>
+
+            <div className="space-y-4 text-xs sm:text-sm">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-xl bg-[#5A5A40]/10 dark:bg-[#5A5A40]/30 text-[#5A5A40] dark:text-[#D1D1BE] flex items-center justify-center shrink-0">
+                  <MapPin className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold uppercase text-[#8E8E85] block">Alamat Kampus:</span>
+                  <p className="font-medium text-[#2D2D2A] dark:text-[#ECECE4]">
+                    {schoolInfo.address}, {schoolInfo.city}, {schoolInfo.province} {schoolInfo.postalCode}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-xl bg-[#5A5A40]/10 dark:bg-[#5A5A40]/30 text-[#5A5A40] dark:text-[#D1D1BE] flex items-center justify-center shrink-0">
+                  <Phone className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold uppercase text-[#8E8E85] block">Telepon / TU:</span>
+                  <p className="font-medium text-[#2D2D2A] dark:text-[#ECECE4]">
+                    {schoolInfo.phone}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-xl bg-[#5A5A40]/10 dark:bg-[#5A5A40]/30 text-[#5A5A40] dark:text-[#D1D1BE] flex items-center justify-center shrink-0">
+                  <Mail className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold uppercase text-[#8E8E85] block">Email Resmi:</span>
+                  <p className="font-medium text-[#2D2D2A] dark:text-[#ECECE4]">
+                    {schoolInfo.email}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-xl bg-[#5A5A40]/10 dark:bg-[#5A5A40]/30 text-[#5A5A40] dark:text-[#D1D1BE] flex items-center justify-center shrink-0">
+                  <Globe className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold uppercase text-[#8E8E85] block">Situs Web:</span>
+                  <p className="font-medium text-[#2D2D2A] dark:text-[#ECECE4]">
+                    {schoolInfo.website}
+                  </p>
+                </div>
+              </div>
+
+              {schoolInfo.tiktokUrl && (
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-xl bg-black text-white flex items-center justify-center shrink-0">
+                    <TikTokIcon className="w-4 h-4 fill-white" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold uppercase text-[#8E8E85] block">TikTok Sekolah:</span>
+                    <a
+                      href={schoolInfo.tiktokUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium text-[#5A5A40] dark:text-[#A4A485] hover:underline"
+                    >
+                      {schoolInfo.tiktokUrl}
+                    </a>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Jam Pelayanan */}
+          <div className="bg-[#F8F8F5] dark:bg-[#1E1E1C] p-5 rounded-2xl border border-[#E0E0D8] dark:border-[#383832] space-y-2">
+            <div className="flex items-center gap-2 text-xs font-bold text-[#5A5A40] dark:text-[#A4A485]">
+              <Clock className="w-4 h-4" />
+              <span>Jam Pelayanan Tata Usaha (TU):</span>
+            </div>
+            <p className="text-xs text-[#2D2D2A] dark:text-[#ECECE4]">
+              Senin - Jumat: 07.30 - 15.30 WIB<br />
+              Sabtu: 07.30 - 12.00 WIB
+            </p>
+          </div>
+        </div>
+
+        {/* Right 2 Columns: Contact Form & Inbox */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Send Message Form */}
+          <div className="bg-white dark:bg-[#1E1E1C] p-6 sm:p-8 rounded-[28px] border border-[#E0E0D8] dark:border-[#383832] shadow-sm space-y-4">
+            <div>
+              <h3 className="font-serif text-lg font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">
+                Kirim Pesan / Pertanyaan ke Sekolah
+              </h3>
+              <p className="text-xs text-[#8E8E85]">
+                Pesan akan langsung diterima oleh admin sekolah dan ditindaklanjuti secara resmi.
+              </p>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">
+                    Nama Lengkap *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={form.senderName}
+                    onChange={e => setForm({ ...form, senderName: e.target.value })}
+                    placeholder="Nama Anda"
+                    className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">
+                    Email Anda *
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={form.senderEmail}
+                    onChange={e => setForm({ ...form, senderEmail: e.target.value })}
+                    placeholder="email@anda.com"
+                    className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">
+                    Nomor WhatsApp / HP
+                  </label>
+                  <input
+                    type="tel"
+                    value={form.senderPhone}
+                    onChange={e => setForm({ ...form, senderPhone: e.target.value })}
+                    placeholder="0812-xxxx-xxxx"
+                    className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">
+                    Subjek / Perihal *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={form.subject}
+                    onChange={e => setForm({ ...form, subject: e.target.value })}
+                    placeholder="Contoh: Pertanyaan PPDB / Kerjasama"
+                    className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">
+                  Isi Pesan *
+                </label>
+                <textarea
+                  required
+                  rows={4}
+                  value={form.message}
+                  onChange={e => setForm({ ...form, message: e.target.value })}
+                  placeholder="Tuliskan pertanyaan atau pesan lengkap Anda..."
+                  className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+                />
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-[#5A5A40] hover:bg-[#484833] text-white font-bold rounded-2xl text-xs sm:text-sm shadow-md transition-transform active:scale-95 cursor-pointer"
+                >
+                  <Send className="w-4 h-4" />
+                  <span>Kirim Pesan Sekarang</span>
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* Admin Messages Inbox */}
+          {canManage && (
+            <div className="bg-white dark:bg-[#1E1E1C] p-6 rounded-[28px] border border-[#E0E0D8] dark:border-[#383832] shadow-sm space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-[#E0E0D8] dark:border-[#383832]">
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="w-5 h-5 text-[#5A5A40] dark:text-[#A4A485]" />
+                  <h3 className="font-serif text-base font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">
+                    Kotak Masuk Pesan Pengunjung ({contactMessages.length})
+                  </h3>
+                </div>
+              </div>
+
+              {contactMessages.length === 0 ? (
+                <p className="text-xs text-[#8E8E85] text-center py-6">Belum ada pesan masuk dari pengunjung.</p>
+              ) : (
+                <div className="space-y-4">
+                  {contactMessages.map(msg => (
+                    <div
+                      key={msg.id}
+                      className="p-4 rounded-2xl bg-[#F8F8F5] dark:bg-[#282825] border border-[#E0E0D8]/60 dark:border-[#383832]/60 space-y-2.5"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <span className="text-xs font-bold text-[#2D2D2A] dark:text-[#F0F0EA] block">
+                            {msg.senderName} ({msg.senderEmail})
+                          </span>
+                          <span className="text-[10px] text-[#8E8E85]">{msg.createdAt} • Subjek: <strong>{msg.subject}</strong></span>
+                        </div>
+                        <button
+                          onClick={() => handleDelete(msg.id, msg.senderName)}
+                          className="text-rose-600 hover:text-rose-700 p-1 cursor-pointer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      <p className="text-xs text-[#2D2D2A] dark:text-[#ECECE4] leading-relaxed bg-white dark:bg-[#1E1E1C] p-3 rounded-xl border border-[#E0E0D8]/40 dark:border-[#383832]/40">
+                        {msg.message}
+                      </p>
+
+                      {msg.replyText ? (
+                        <div className="p-3 bg-emerald-50 dark:bg-emerald-950/30 rounded-xl border border-emerald-200 dark:border-emerald-900/40 text-xs text-emerald-900 dark:text-emerald-200 space-y-1">
+                          <span className="font-bold flex items-center gap-1 text-[11px]">
+                            <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                            Balasan Resmi:
+                          </span>
+                          <p>{msg.replyText}</p>
+                          <span className="text-[10px] text-emerald-700 dark:text-emerald-400 block pt-1">Dibalas pada: {msg.repliedAt}</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 pt-1">
+                          <input
+                            type="text"
+                            placeholder="Tulis balasan untuk pesan ini..."
+                            value={replyInput[msg.id] || ''}
+                            onChange={e => setReplyInput({ ...replyInput, [msg.id]: e.target.value })}
+                            className="flex-1 px-3 py-1.5 bg-white dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs text-[#2D2D2A] dark:text-[#EAEAE2]"
+                          />
+                          <button
+                            onClick={() => handleReply(msg.id)}
+                            className="px-3 py-1.5 bg-[#5A5A40] text-white font-bold text-xs rounded-xl cursor-pointer flex items-center gap-1"
+                          >
+                            <Reply className="w-3.5 h-3.5" />
+                            <span>Balas</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};

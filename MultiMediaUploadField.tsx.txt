@@ -1,0 +1,382 @@
+import React, { useState, useRef } from 'react';
+import { Upload, Image as ImageIcon, Video as VideoIcon, X, Check, RefreshCw, Link2, Film, Plus, Layers, AlertCircle } from 'lucide-react';
+
+export interface MultiMediaItem {
+  id: string;
+  url: string;
+  mediaType: 'image' | 'video';
+  fileName?: string;
+  title?: string;
+}
+
+interface MultiMediaUploadFieldProps {
+  id?: string;
+  label?: string;
+  allowedMediaType?: 'image' | 'video' | 'both';
+  items: MultiMediaItem[];
+  onChange: (items: MultiMediaItem[]) => void;
+  required?: boolean;
+  helperText?: string;
+  maxFiles?: number;
+  allowCustomTitles?: boolean;
+}
+
+export const MultiMediaUploadField: React.FC<MultiMediaUploadFieldProps> = ({
+  id,
+  label = 'Upload Beberapa Foto / Video Sekaligus',
+  allowedMediaType = 'both',
+  items,
+  onChange,
+  required = false,
+  helperText,
+  maxFiles = 30,
+  allowCustomTitles = true
+}) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploading, setIsUploading] = useState<boolean>(false);
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number }>({ current: 0, total: 0 });
+  const [dragActive, setDragActive] = useState<boolean>(false);
+  const [showUrlInput, setShowUrlInput] = useState<boolean>(false);
+  const [urlInput, setUrlInput] = useState<string>('');
+  const [errorMessage, setErrorMessage] = useState<string>('');
+
+  const acceptTypes = allowedMediaType === 'video'
+    ? 'video/mp4,video/webm,video/quicktime'
+    : allowedMediaType === 'image'
+      ? 'image/jpeg,image/png,image/webp,image/gif'
+      : 'image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime';
+
+  const handleProcessFiles = async (files: FileList | File[]) => {
+    if (!files || files.length === 0) return;
+    setErrorMessage('');
+    setIsUploading(true);
+
+    const fileArray = Array.from(files);
+    const newItems: MultiMediaItem[] = [];
+    let processedCount = 0;
+    setUploadProgress({ current: 0, total: fileArray.length });
+
+    for (let i = 0; i < fileArray.length; i++) {
+      const file = fileArray[i];
+      const isVid = file.type.startsWith('video/') || file.name.endsWith('.mp4') || file.name.endsWith('.webm');
+      const mediaType: 'image' | 'video' = isVid ? 'video' : 'image';
+
+      // Check allowed media type
+      if (allowedMediaType === 'image' && mediaType === 'video') {
+        continue;
+      }
+      if (allowedMediaType === 'video' && mediaType === 'image') {
+        continue;
+      }
+
+      try {
+        const base64Data = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve(e.target?.result as string);
+          reader.onerror = (err) => reject(err);
+          reader.readAsDataURL(file);
+        });
+
+        // Try server upload endpoint
+        let finalUrl = base64Data;
+        try {
+          const res = await fetch('/api/upload', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              filename: file.name,
+              base64Data: base64Data,
+              mimeType: file.type
+            })
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            if (data?.url) {
+              finalUrl = data.url;
+            }
+          }
+        } catch (serverErr) {
+          // Fallback to base64
+        }
+
+        newItems.push({
+          id: 'media_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+          url: finalUrl,
+          mediaType,
+          fileName: file.name,
+          title: file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ')
+        });
+
+      } catch (err) {
+        console.error('Error processing file:', file.name, err);
+      }
+
+      processedCount++;
+      setUploadProgress({ current: processedCount, total: fileArray.length });
+    }
+
+    if (newItems.length > 0) {
+      onChange([...items, ...newItems]);
+    } else {
+      setErrorMessage('Tidak ada berkas valid yang dapat diunggah.');
+    }
+
+    setIsUploading(false);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      handleProcessFiles(e.target.files);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleProcessFiles(e.dataTransfer.files);
+    }
+  };
+
+  const handleAddUrl = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = urlInput.trim();
+    if (!trimmed) return;
+
+    // Check multiple URLs separated by newline or space
+    const urls = trimmed.split(/[\n,]+/).map(u => u.trim()).filter(Boolean);
+    const newItems: MultiMediaItem[] = urls.map(u => {
+      const isVid = u.endsWith('.mp4') || u.endsWith('.webm') || u.includes('video');
+      return {
+        id: 'media_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+        url: u,
+        mediaType: isVid ? 'video' : 'image',
+        title: 'Media Online'
+      };
+    });
+
+    onChange([...items, ...newItems]);
+    setUrlInput('');
+  };
+
+  const handleRemoveItem = (idToRemove: string) => {
+    onChange(items.filter(it => it.id !== idToRemove));
+  };
+
+  const handleUpdateItemTitle = (idToUpdate: string, newTitle: string) => {
+    onChange(items.map(it => it.id === idToUpdate ? { ...it, title: newTitle } : it));
+  };
+
+  const handleClearAll = () => {
+    onChange([]);
+  };
+
+  const photoCount = items.filter(it => it.mediaType === 'image').length;
+  const videoCount = items.filter(it => it.mediaType === 'video').length;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <label className="block text-xs font-bold text-[#2D2D2A] flex items-center gap-1.5">
+          <Layers className="w-4 h-4 text-[#5A5A40]" />
+          <span>{label} {required && <span className="text-red-500">*</span>}</span>
+        </label>
+
+        <div className="flex items-center gap-3">
+          {items.length > 0 && (
+            <button
+              type="button"
+              onClick={handleClearAll}
+              className="text-[11px] font-bold text-red-600 hover:text-red-800 cursor-pointer"
+            >
+              Hapus Semua ({items.length})
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setShowUrlInput(!showUrlInput)}
+            className="text-[11px] font-semibold text-[#5A5A40] hover:text-[#2D2D2A] flex items-center gap-1 cursor-pointer transition-colors"
+          >
+            <Link2 className="w-3 h-3" />
+            <span>{showUrlInput ? 'Mode File Perangkat' : 'Tambah via URL Link'}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* URL Link Input Mode */}
+      {showUrlInput && (
+        <div className="p-3.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-2xl space-y-2">
+          <label className="block text-[11px] font-bold text-[#2D2D2A]">
+            Tempel Tautan URL Media (Bisa beberapa tautan dipisah baris baru)
+          </label>
+          <div className="flex gap-2">
+            <textarea
+              rows={2}
+              value={urlInput}
+              onChange={e => setUrlInput(e.target.value)}
+              placeholder="https://.../foto1.jpg&#10;https://.../foto2.jpg"
+              className="flex-1 px-3 py-2 bg-white border border-[#E0E0D8] rounded-xl text-xs text-[#2D2D2A] focus:outline-none focus:border-[#5A5A40]"
+            />
+            <button
+              type="button"
+              onClick={handleAddUrl}
+              className="px-4 py-2 bg-[#5A5A40] hover:bg-[#484833] text-white text-xs font-bold rounded-xl flex items-center gap-1 cursor-pointer self-end"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Tambah</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Hidden Multi-file Input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept={acceptTypes}
+        onChange={handleFileChange}
+        className="hidden"
+      />
+
+      {/* Drag & Drop Multi-file Box */}
+      <div
+        onDrop={handleDrop}
+        onDragOver={e => { e.preventDefault(); setDragActive(true); }}
+        onDragLeave={e => { e.preventDefault(); setDragActive(false); }}
+        onClick={() => fileInputRef.current?.click()}
+        className={`border-2 border-dashed rounded-2xl p-5 text-center cursor-pointer transition-all ${
+          dragActive
+            ? 'border-[#5A5A40] bg-[#5A5A40]/10 scale-[1.01]'
+            : 'border-[#D0D0C8] hover:border-[#5A5A40] bg-[#FBFBFA] hover:bg-[#F5F5F0]'
+        }`}
+      >
+        {isUploading ? (
+          <div className="py-3 flex flex-col items-center justify-center space-y-2">
+            <RefreshCw className="w-8 h-8 text-[#5A5A40] animate-spin" />
+            <p className="text-xs font-bold text-[#2D2D2A]">
+              Memproses & Mengunggah {uploadProgress.current}/{uploadProgress.total} Media...
+            </p>
+            <p className="text-[11px] text-[#8E8E85]">Harap tunggu, foto/video sedang disiapkan</p>
+          </div>
+        ) : (
+          <div className="py-2 flex flex-col items-center justify-center space-y-2">
+            <div className="flex items-center gap-2">
+              <div className="w-10 h-10 rounded-2xl bg-[#5A5A40]/10 text-[#5A5A40] flex items-center justify-center">
+                <ImageIcon className="w-5 h-5" />
+              </div>
+              <div className="w-10 h-10 rounded-2xl bg-[#8C4A32]/10 text-[#8C4A32] flex items-center justify-center">
+                <VideoIcon className="w-5 h-5" />
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-bold text-[#2D2D2A]">
+                Pilih Beberapa Foto / Video Sekaligus (Multi-Upload)
+              </p>
+              <p className="text-[11px] text-[#8E8E85] mt-0.5">
+                Tarik beberapa file ke sini atau klik tombol di bawah untuk memilih banyak foto/video dari Galeri
+              </p>
+            </div>
+
+            <button
+              type="button"
+              className="px-4 py-2 bg-[#5A5A40] hover:bg-[#484833] text-white text-xs font-bold rounded-xl shadow-xs pointer-events-none flex items-center gap-1.5"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>PILIH BEBERAPA FOTO/VIDEO</span>
+            </button>
+          </div>
+        )}
+      </div>
+
+      {errorMessage && (
+        <div className="flex items-center gap-1.5 text-xs text-red-600 font-semibold">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{errorMessage}</span>
+        </div>
+      )}
+
+      {/* Selected Items Grid Preview */}
+      {items.length > 0 && (
+        <div className="space-y-2 pt-1">
+          <div className="flex items-center justify-between text-xs font-bold text-[#5A5A40] px-1">
+            <span className="flex items-center gap-1.5">
+              <Check className="w-4 h-4 text-emerald-600" />
+              <span>{items.length} Berkas Terpilih ({photoCount} Foto, {videoCount} Video)</span>
+            </span>
+            <span className="text-[11px] text-[#8E8E85]">Siap diunggah sekaligus</span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-[320px] overflow-y-auto p-1">
+            {items.map((item, idx) => (
+              <div
+                key={item.id || idx}
+                className="group relative bg-white border border-[#E0E0D8] rounded-2xl overflow-hidden shadow-xs hover:shadow-md transition-all flex flex-col"
+              >
+                {/* Media Preview Box */}
+                <div className="relative w-full h-24 bg-[#2D2D2A] flex items-center justify-center overflow-hidden">
+                  {item.mediaType === 'video' ? (
+                    <video
+                      src={item.url}
+                      className="w-full h-full object-cover"
+                      muted
+                      controls={false}
+                    />
+                  ) : (
+                    <img
+                      src={item.url}
+                      alt={item.title || 'Foto'}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?auto=format&fit=crop&w=400&q=80';
+                      }}
+                    />
+                  )}
+
+                  {/* Badge Type */}
+                  <span className="absolute top-1.5 left-1.5 bg-black/75 backdrop-blur-xs text-white text-[9px] font-bold px-1.5 py-0.5 rounded">
+                    {item.mediaType === 'video' ? 'VIDEO' : 'FOTO'}
+                  </span>
+
+                  {/* Delete Single Item */}
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveItem(item.id)}
+                    className="absolute top-1.5 right-1.5 w-6 h-6 bg-red-600 hover:bg-red-700 text-white rounded-full flex items-center justify-center cursor-pointer shadow-md transition-transform active:scale-90"
+                    title="Hapus media ini"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {/* Caption / Title input */}
+                {allowCustomTitles && (
+                  <div className="p-2 bg-white">
+                    <input
+                      type="text"
+                      value={item.title || ''}
+                      onChange={e => handleUpdateItemTitle(item.id, e.target.value)}
+                      placeholder="Judul / Keterangan..."
+                      className="w-full text-[11px] font-medium text-[#2D2D2A] px-2 py-1 bg-[#F8F8F5] border border-[#E0E0D8] rounded-lg focus:outline-none focus:border-[#5A5A40] truncate"
+                    />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {helperText && (
+        <p className="text-[11px] text-[#8E8E85]">{helperText}</p>
+      )}
+    </div>
+  );
+};

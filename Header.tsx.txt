@@ -1,0 +1,296 @@
+import React, { useState } from 'react';
+import { useApp } from '../context/AppContext';
+import { HtmlExportModal } from './HtmlExportModal';
+import { 
+  GraduationCap, 
+  ShieldCheck, 
+  UserCheck, 
+  User, 
+  LogIn, 
+  LogOut, 
+  Calendar, 
+  Sparkles, 
+  RefreshCw,
+  Sun,
+  Moon,
+  Users,
+  Award,
+  Archive,
+  BookOpen,
+  Compass,
+  FileCode
+} from 'lucide-react';
+
+interface HeaderProps {
+  onOpenAuth?: () => void;
+}
+
+export const Header: React.FC<HeaderProps> = ({ onOpenAuth }) => {
+  const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
+  const {
+    schoolInfo,
+    authSession,
+    setIsAuthModalOpen,
+    isAdminPanelOpen,
+    setIsAdminPanelOpen,
+    currentView,
+    setCurrentView,
+    setSelectedClassId,
+    setSelectedEskulId,
+    logout,
+    classes,
+    eskulList,
+    isCloudConnected,
+    isCloudSyncing,
+    syncWithCentralServer,
+    theme,
+    toggleTheme,
+    openTeachersView,
+    urgentAnnouncement
+  } = useApp();
+
+  const handleOpenAuthModal = () => {
+    if (onOpenAuth) {
+      onOpenAuth();
+    } else {
+      setIsAuthModalOpen(true);
+    }
+  };
+
+  const handleBrandClick = () => {
+    setSelectedClassId(null);
+    setSelectedEskulId(null);
+    setIsAdminPanelOpen(false);
+    setCurrentView('home');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const activeClassName =
+    authSession.role === 'class_admin' && authSession.classId
+      ? classes.find(c => c.id === authSession.classId)?.name || 'Kelas'
+      : '';
+
+  const activeEskulName =
+    authSession.role === 'eskul_admin' && authSession.eskulId
+      ? eskulList.find(e => e.id === authSession.eskulId)?.name || 'Eskul'
+      : '';
+
+  const isAnyAdmin =
+    authSession.role === 'super_admin' ||
+    authSession.role === 'custom_admin' ||
+    authSession.role === 'class_admin' ||
+    authSession.role === 'eskul_admin';
+
+  const todayStr = new Intl.DateTimeFormat('id-ID', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric'
+  }).format(new Date());
+
+  return (
+    <header className="sticky top-0 z-30 bg-white/95 dark:bg-[#1E1E1C]/95 backdrop-blur-md text-[#2D2D2A] dark:text-[#EAEAE2] border-b border-[#E0E0D8] dark:border-[#383832] shadow-sm transition-colors duration-200">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-16 sm:h-20">
+          
+          {/* Logo & School Brand */}
+          <div 
+            id="brand-header-logo"
+            onClick={handleBrandClick}
+            className="flex items-center gap-3 cursor-pointer group select-none"
+            title="Kembali ke Beranda Sekolah"
+          >
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-[#5A5A40] dark:bg-[#727252] group-hover:bg-[#484833] dark:group-hover:bg-[#868662] flex items-center justify-center shadow-md text-white font-bold transition-transform group-active:scale-95">
+              <GraduationCap className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] sm:text-xs font-bold uppercase tracking-widest text-[#5A5A40] dark:text-[#A4A485] flex items-center gap-1">
+                  <Sparkles className="w-3 h-3 text-[#5A5A40] dark:text-[#A4A485]" />
+                  GALERI KENANGAN SEKOLAH
+                </span>
+                <span className="hidden sm:inline-flex px-2 py-0.5 text-[10px] font-bold bg-[#F5F5F0] dark:bg-[#282825] text-[#5A5A40] dark:text-[#C5C5B0] border border-[#E0E0D8] dark:border-[#42423B] rounded-full">
+                  Akreditasi {schoolInfo.akreditasi}
+                </span>
+              </div>
+              <h1 className="font-serif text-base sm:text-lg lg:text-xl font-bold tracking-tight text-[#2D2D2A] dark:text-[#F0F0EA] line-clamp-1 group-hover:text-[#5A5A40] dark:group-hover:text-[#C5C5B0] transition-colors">
+                {schoolInfo.name}
+              </h1>
+            </div>
+          </div>
+
+          {/* Right Section: Actions, Dark/Light Mode, & Auth */}
+          <div className="flex items-center gap-2 sm:gap-2.5">
+            {/* 📥 Ekspor HTML Website Button */}
+            <button
+              id="btn-export-html-modal"
+              onClick={() => setIsExportModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl border border-[#5A5A40]/30 dark:border-[#727252]/40 bg-[#5A5A40]/10 dark:bg-[#5A5A40]/30 text-[#5A5A40] dark:text-[#EAEAE2] hover:bg-[#5A5A40]/20 dark:hover:bg-[#5A5A40]/40 transition-all cursor-pointer shadow-xs text-xs font-bold active:scale-95"
+              title="Ekspor Seluruh Website Menjadi File .HTML Mandiri (Bisa Dibuka Offline)"
+            >
+              <FileCode className="w-4 h-4 text-[#5A5A40] dark:text-[#C5C5B0]" />
+              <span className="hidden md:inline">Ekspor HTML</span>
+            </button>
+
+            {/* 🌓 Dark / Light Mode Toggle Button */}
+            <button
+              id="btn-toggle-dark-mode"
+              onClick={toggleTheme}
+              className="p-2 sm:p-2.5 rounded-xl border border-[#E0E0D8] dark:border-[#42423B] bg-[#F5F5F0] dark:bg-[#282825] text-[#5A5A40] dark:text-[#EAEAE2] hover:bg-[#EAEAE5] dark:hover:bg-[#33332D] transition-all cursor-pointer shadow-xs active:scale-95"
+              title={theme === 'dark' ? 'Ganti ke Mode Terang' : 'Ganti ke Mode Gelap'}
+            >
+              {theme === 'dark' ? (
+                <Sun className="w-4 h-4 text-amber-400 animate-spin-slow" />
+              ) : (
+                <Moon className="w-4 h-4 text-[#5A5A40]" />
+              )}
+            </button>
+
+            {/* Cloud Sync Status Indicator */}
+            <button
+              onClick={() => syncWithCentralServer(true)}
+              className={`hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all cursor-pointer ${
+                isCloudConnected
+                  ? 'bg-[#F5F5F0] dark:bg-[#282825] border-[#E0E0D8] dark:border-[#42423B] text-[#5A5A40] dark:text-[#C5C5B0] hover:bg-[#EBEBE5] dark:hover:bg-[#33332D]'
+                  : 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200'
+              }`}
+              title="Status pusat data bersama Firebase/Cloud (Klik untuk sinkronkan)"
+            >
+              {isCloudSyncing ? (
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#5A5A40] dark:text-[#C5C5B0]" />
+              ) : (
+                <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-xs" />
+              )}
+              <span className="text-[11px] font-semibold">
+                {isCloudSyncing ? 'Menyinkronkan...' : 'Pusat Data'}
+              </span>
+            </button>
+
+            {/* Creator Badge & TA */}
+            <div className="hidden lg:flex items-center gap-2">
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold bg-[#5A5A40]/10 dark:bg-[#5A5A40]/30 text-[#5A5A40] dark:text-[#D1D1BE] border border-[#5A5A40]/20 dark:border-[#5A5A40]/40 rounded-xl">
+                <span>Pembuat:</span>
+                <span className="font-extrabold text-[#2D2D2A] dark:text-[#F0F0EA]">{schoolInfo.creatorName || 'Waa-O51W'}</span>
+              </span>
+            </div>
+
+            {/* Auth Session Status & Action */}
+            {authSession.role === 'visitor' ? (
+              <button
+                id="btn-open-login"
+                onClick={handleOpenAuthModal}
+                className="inline-flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold uppercase tracking-wider bg-[#5A5A40] dark:bg-[#727252] hover:bg-[#484833] dark:hover:bg-[#868662] text-white shadow-sm transition-all cursor-pointer active:scale-95"
+              >
+                <LogIn className="w-4 h-4 text-white" />
+                <span>Masuk Sistem</span>
+              </button>
+            ) : (
+              <div className="flex items-center gap-2">
+                {/* 👑 Super Admin / Custom Admin Panel */}
+                {(authSession.role === 'super_admin' || authSession.role === 'custom_admin') ? (
+                  <button
+                    id="btn-admin-utama-panel"
+                    onClick={() => {
+                      setIsAdminPanelOpen(true);
+                      setCurrentView('admin_panel');
+                    }}
+                    className={`inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm active:scale-95 ${
+                      isAdminPanelOpen || currentView === 'admin_panel'
+                        ? 'bg-[#723B28] dark:bg-[#8C4A32] text-white ring-2 ring-[#8C4A32]/40'
+                        : 'bg-[#8C4A32] hover:bg-[#723B28] dark:bg-[#A35639] dark:hover:bg-[#8C4A32] text-white'
+                    }`}
+                    title="Buka Panel Pengelolaan Admin Sekolah"
+                  >
+                    <ShieldCheck className="w-4 h-4 text-white" />
+                    <span>👑 {authSession.role === 'super_admin' ? 'Admin Utama' : authSession.name}</span>
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] text-[#2D2D2A] dark:text-[#EAEAE2]">
+                    {authSession.role === 'class_admin' && (
+                      <>
+                        <UserCheck className="w-4 h-4 text-[#5A5A40] dark:text-[#A4A485]" />
+                        <span className="text-[#5A5A40] dark:text-[#A4A485] font-bold">Admin {activeClassName}</span>
+                      </>
+                    )}
+                    {authSession.role === 'eskul_admin' && (
+                      <>
+                        <UserCheck className="w-4 h-4 text-[#8C4A32] dark:text-[#E07A5F]" />
+                        <span className="text-[#8C4A32] dark:text-[#E07A5F] font-bold">Admin {activeEskulName}</span>
+                      </>
+                    )}
+                    {authSession.role === 'student' && (
+                      <>
+                        <User className="w-4 h-4 text-[#5A5A40] dark:text-[#A4A485]" />
+                        <span className="text-[#5A5A40] dark:text-[#A4A485] font-bold line-clamp-1 max-w-[110px]">
+                          {authSession.name}
+                        </span>
+                      </>
+                    )}
+                    {authSession.role === 'eskul_student' && (
+                      <>
+                        <User className="w-4 h-4 text-[#8C4A32] dark:text-[#E07A5F]" />
+                        <span className="text-[#8C4A32] dark:text-[#E07A5F] font-bold line-clamp-1 max-w-[110px]">
+                          {authSession.name}
+                        </span>
+                      </>
+                    )}
+                    {(authSession.role === 'school_member' || authSession.role === 'google_user') && (
+                      <>
+                        {authSession.avatarUrl ? (
+                          <img
+                            src={authSession.avatarUrl}
+                            alt={authSession.name || 'Google User'}
+                            className="w-4 h-4 rounded-full object-cover border border-emerald-400"
+                            referrerPolicy="no-referrer"
+                          />
+                        ) : (
+                          <User className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                        )}
+                        <span className="text-[#2D2D2A] dark:text-[#EAEAE2] font-bold line-clamp-1 max-w-[120px]">
+                          {authSession.name || authSession.email || 'Warga Sekolah'}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {/* Logout Button */}
+                <button
+                  id="btn-logout"
+                  onClick={logout}
+                  className="p-2 sm:px-3 sm:py-1.5 rounded-xl text-xs font-bold bg-[#F5F5F0] dark:bg-[#282825] hover:bg-[#E0E0D8] dark:hover:bg-[#383832] text-[#5A5A40] dark:text-[#EAEAE2] border border-[#E0E0D8] dark:border-[#42423B] transition-colors cursor-pointer flex items-center gap-1"
+                  title="Keluar dari akun"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span className="hidden sm:inline">Keluar</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 🔴 PENGUMUMAN DARURAT / PENTING (RUNNING TEXT MARQUEE) */}
+      {urgentAnnouncement && urgentAnnouncement.isActive && urgentAnnouncement.text && (
+        <div id="urgent-announcement-bar" className="bg-[#8C4A32] text-white px-4 py-2 text-xs font-medium flex items-center gap-3 overflow-hidden shadow-inner border-t border-[#723B28]/40">
+          <div className="flex items-center gap-1.5 px-2.5 py-0.5 bg-white/20 text-white rounded-full font-bold uppercase tracking-wider text-[10px] shrink-0 animate-pulse">
+            <span className="w-2 h-2 rounded-full bg-amber-300 inline-block animate-ping mr-0.5" />
+            <span>PENGUMUMAN PENTING</span>
+          </div>
+          <div className="flex-1 overflow-hidden relative whitespace-nowrap">
+            <div className="inline-block animate-marquee font-medium">
+              <span className="font-bold mr-2">[{urgentAnnouncement.date}]</span>
+              <span>{urgentAnnouncement.text}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 💾 Modal Ekspor Seluruh Website ke Berkas HTML */}
+      <HtmlExportModal 
+        isOpen={isExportModalOpen} 
+        onClose={() => setIsExportModalOpen(false)} 
+      />
+    </header>
+  );
+};

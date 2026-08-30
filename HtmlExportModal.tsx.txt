@@ -1,0 +1,257 @@
+import React, { useState } from 'react';
+import { useApp } from '../context/AppContext';
+import { generateSchoolPortalHtml, getWebsiteIndexHtml } from '../utils/htmlExport';
+import { 
+  FileCode, 
+  Download, 
+  Copy, 
+  Check, 
+  ExternalLink, 
+  X, 
+  Sparkles, 
+  Code, 
+  Globe, 
+  Monitor, 
+  CheckCircle2 
+} from 'lucide-react';
+
+interface HtmlExportModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+export const HtmlExportModal: React.FC<HtmlExportModalProps> = ({ isOpen, onClose }) => {
+  const {
+    schoolInfo,
+    classes,
+    students,
+    teachers,
+    announcements,
+    eskulList,
+    calendarEvents,
+    facilities,
+    showToast
+  } = useApp();
+
+  const [activeType, setActiveType] = useState<'portal' | 'index'>('portal');
+  const [copied, setCopied] = useState<boolean>(false);
+  const [showCodePreview, setShowCodePreview] = useState<boolean>(false);
+
+  if (!isOpen) return null;
+
+  const fullPortalHtml = generateSchoolPortalHtml({
+    schoolInfo,
+    classes,
+    students,
+    teachers,
+    announcements,
+    eskulList,
+    calendarEvents,
+    facilities
+  });
+
+  const indexHtml = getWebsiteIndexHtml(schoolInfo);
+  const currentHtml = activeType === 'portal' ? fullPortalHtml : indexHtml;
+
+  const handleDownload = () => {
+    const filename = activeType === 'portal'
+      ? `${schoolInfo.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}-website-portal.html`
+      : 'index.html';
+
+    const blob = new Blob([currentHtml], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    showToast(`Berkas "${filename}" berhasil diunduh!`, 'success');
+  };
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(currentHtml);
+      setCopied(true);
+      showToast('Seluruh kode HTML berhasil disalin ke clipboard!', 'success');
+      setTimeout(() => setCopied(false), 3000);
+    } catch {
+      showToast('Gagal menyalin kode.', 'error');
+    }
+  };
+
+  const handlePreviewNewTab = () => {
+    const blob = new Blob([currentHtml], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+      <div className="bg-white dark:bg-[#1E1E1C] rounded-3xl border border-[#E0E0D8] dark:border-[#383832] shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-scale-up text-[#2D2D2A] dark:text-[#EAEAE2]">
+        
+        {/* Modal Header */}
+        <div className="px-6 py-5 border-b border-[#E0E0D8] dark:border-[#383832] flex items-center justify-between bg-[#FBFBFA] dark:bg-[#252522]">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-[#5A5A40] text-white flex items-center justify-center shadow-md">
+              <FileCode className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-serif text-lg font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">
+                  Ekspor Website Menjadi File HTML
+                </h3>
+                <span className="px-2 py-0.5 text-[10px] font-bold bg-[#5A5A40]/10 text-[#5A5A40] dark:text-[#C5C5B0] rounded-full">
+                  Standalone
+                </span>
+              </div>
+              <p className="text-xs text-[#7A7A70] dark:text-[#A4A496]">
+                Simpan dan jalankan website sekolah sebagai berkas .HTML utuh luring (offline).
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 text-[#7A7A70] hover:text-[#2D2D2A] dark:hover:text-[#F0F0EA] rounded-full hover:bg-[#EAEAE5] dark:hover:bg-[#33332D] transition-colors cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Modal Body */}
+        <div className="p-6 overflow-y-auto space-y-5">
+          {/* Option Selector */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => setActiveType('portal')}
+              className={`p-4 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                activeType === 'portal'
+                  ? 'border-[#5A5A40] bg-[#5A5A40]/5 dark:bg-[#5A5A40]/20 ring-2 ring-[#5A5A40]/30'
+                  : 'border-[#E0E0D8] dark:border-[#383832] bg-white dark:bg-[#282825] hover:border-[#5A5A40]/50'
+              }`}
+            >
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <div className="p-1.5 rounded-lg bg-[#5A5A40] text-white">
+                    <Monitor className="w-4 h-4" />
+                  </div>
+                  {activeType === 'portal' && (
+                    <CheckCircle2 className="w-4 h-4 text-[#5A5A40] dark:text-[#A4A485]" />
+                  )}
+                </div>
+                <h4 className="font-bold text-sm text-[#2D2D2A] dark:text-[#F0F0EA]">
+                  Portal Web Lengkap Interaktif (.html)
+                </h4>
+                <p className="text-xs text-[#7A7A70] dark:text-[#A4A496] leading-relaxed">
+                  Menyertakan profil visi-misi, {classes.length} rombel kelas, {students.length} siswa, {teachers.length} guru/staf, kalender akademik, pengumuman, ekskul, dan kontak dengan navigasi tab offline.
+                </p>
+              </div>
+              <span className="mt-3 text-[11px] font-bold text-[#5A5A40] dark:text-[#C5C5B0]">
+                Rekomendasi Utama ⭐
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveType('index')}
+              className={`p-4 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                activeType === 'index'
+                  ? 'border-[#5A5A40] bg-[#5A5A40]/5 dark:bg-[#5A5A40]/20 ring-2 ring-[#5A5A40]/30'
+                  : 'border-[#E0E0D8] dark:border-[#383832] bg-white dark:bg-[#282825] hover:border-[#5A5A40]/50'
+              }`}
+            >
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <div className="p-1.5 rounded-lg bg-purple-600 text-white">
+                    <Globe className="w-4 h-4" />
+                  </div>
+                  {activeType === 'index' && (
+                    <CheckCircle2 className="w-4 h-4 text-[#5A5A40] dark:text-[#A4A485]" />
+                  )}
+                </div>
+                <h4 className="font-bold text-sm text-[#2D2D2A] dark:text-[#F0F0EA]">
+                  Template Entry Point (index.html)
+                </h4>
+                <p className="text-xs text-[#7A7A70] dark:text-[#A4A496] leading-relaxed">
+                  Struktur HTML dasar dengan meta tags SEO, Open Graph media sosial, font Google, dan elemen root aplikasi React.
+                </p>
+              </div>
+              <span className="mt-3 text-[11px] font-bold text-purple-600 dark:text-purple-400">
+                Untuk Developer & Hosting
+              </span>
+            </button>
+          </div>
+
+          {/* Quick Summary Info */}
+          <div className="p-4 rounded-2xl bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#383832] flex items-start gap-3">
+            <Sparkles className="w-5 h-5 text-[#5A5A40] dark:text-[#A4A485] shrink-0 mt-0.5" />
+            <div className="text-xs space-y-1">
+              <p className="font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">
+                Keunggulan Berkas HTML Mandiri:
+              </p>
+              <p className="text-[#7A7A70] dark:text-[#A4A496] leading-relaxed">
+                Berkas HTML ini menggabungkan struktur HTML, gaya CSS responsif, data sekolah, dan fungsi pencarian Javascript ke dalam <strong>1 file tunggal</strong>. Anda dapat mengirim berkas melalui WhatsApp/Email, menyimpannya di flashdisk, atau membukanya di HP & komputer tanpa memerlukan koneksi internet.
+              </p>
+            </div>
+          </div>
+
+          {/* Toggle Code Preview */}
+          <div>
+            <button
+              type="button"
+              onClick={() => setShowCodePreview(!showCodePreview)}
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-[#5A5A40] dark:text-[#C5C5B0] hover:underline cursor-pointer"
+            >
+              <Code className="w-4 h-4" />
+              <span>{showCodePreview ? 'Sembunyikan Cuplikan Kode HTML' : 'Lihat Cuplikan Kode HTML'}</span>
+            </button>
+
+            {showCodePreview && (
+              <div className="mt-2 relative">
+                <pre className="p-4 bg-[#181816] text-[#A4A485] text-[11px] font-mono rounded-2xl overflow-x-auto max-h-48 border border-[#383832]">
+                  <code>{currentHtml.slice(0, 1200)}...</code>
+                </pre>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Modal Footer Actions */}
+        <div className="px-6 py-4 border-t border-[#E0E0D8] dark:border-[#383832] bg-[#FBFBFA] dark:bg-[#252522] flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleCopy}
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-[#E0E0D8] dark:border-[#383832] bg-white dark:bg-[#282825] hover:bg-[#F5F5F0] dark:hover:bg-[#33332D] text-xs font-bold text-[#2D2D2A] dark:text-[#EAEAE2] transition-all cursor-pointer shadow-xs active:scale-95"
+            >
+              {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+              <span>{copied ? 'Tersalin!' : 'Salin Kode HTML'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handlePreviewNewTab}
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-[#E0E0D8] dark:border-[#383832] bg-white dark:bg-[#282825] hover:bg-[#F5F5F0] dark:hover:bg-[#33332D] text-xs font-bold text-[#2D2D2A] dark:text-[#EAEAE2] transition-all cursor-pointer shadow-xs active:scale-95"
+            >
+              <ExternalLink className="w-4 h-4" />
+              <span>Buka di Tab Baru</span>
+            </button>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleDownload}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#5A5A40] hover:bg-[#444430] text-white text-xs sm:text-sm font-bold shadow-md transition-transform active:scale-95 cursor-pointer"
+          >
+            <Download className="w-4 h-4" />
+            <span>Unduh Berkas .HTML</span>
+          </button>
+        </div>
+
+      </div>
+    </div>
+  );
+};

@@ -1,0 +1,1608 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { useApp } from '../context/AppContext';
+import { 
+  signInWithGoogle, 
+  getGoogleAccessToken, 
+  setGoogleAccessToken,
+  logoutGoogle, 
+  getGoogleUser 
+} from '../services/googleAuth';
+import { 
+  listGoogleCalendarEvents, 
+  createGoogleCalendarEvent, 
+  deleteGoogleCalendarEvent, 
+  syncSchoolEventsToGoogleCalendar,
+  GoogleCalendarEvent, 
+  CreateEventInput 
+} from '../services/googleCalendarService';
+import { 
+  listGmailMessages, 
+  getGmailMessageDetails, 
+  sendGmailEmail, 
+  trashGmailMessage, 
+  GmailMessageSummary, 
+  GmailMessageFull 
+} from '../services/gmailIntegrationService';
+import { 
+  listClassroomCourses, 
+  listClassroomCourseWork, 
+  listClassroomAnnouncements, 
+  listClassroomStudents, 
+  createClassroomAnnouncement, 
+  createClassroomCourseWork, 
+  deleteClassroomCourseWork, 
+  ClassroomCourse, 
+  ClassroomCourseWork, 
+  ClassroomAnnouncement, 
+  ClassroomStudent 
+} from '../services/googleClassroomService';
+import { GoogleSignInButton } from '../components/GoogleSignInButton';
+import { WorkspaceConfirmModal } from '../components/WorkspaceConfirmModal';
+import { 
+  Calendar, 
+  Mail, 
+  GraduationCap, 
+  RefreshCw, 
+  Plus, 
+  Trash2, 
+  Send, 
+  ExternalLink, 
+  CheckCircle2, 
+  AlertCircle, 
+  Search, 
+  Clock, 
+  MapPin, 
+  User, 
+  BookOpen, 
+  MessageSquare, 
+  Check, 
+  X, 
+  Sparkles, 
+  ChevronRight, 
+  Inbox, 
+  FileText, 
+  Users, 
+  ArrowRight,
+  LogOut,
+  CalendarDays,
+  MailCheck,
+  Award
+} from 'lucide-react';
+
+export type WorkspaceTab = 'calendar' | 'gmail' | 'classroom';
+
+interface GoogleWorkspaceHubViewProps {
+  initialTab?: WorkspaceTab;
+}
+
+export const GoogleWorkspaceHubView: React.FC<GoogleWorkspaceHubViewProps> = ({ initialTab = 'calendar' }) => {
+  const { schoolInfo, calendarEvents, showToast } = useApp();
+
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>(initialTab);
+  const [accessToken, setAccessToken] = useState<string | null>(getGoogleAccessToken());
+  const [googleUser, setGoogleUserState] = useState(getGoogleUser());
+  const [isAuthenticating, setIsAuthenticating] = useState<boolean>(false);
+
+  // 📅 Calendar State
+  const [calendarEventsList, setCalendarEventsList] = useState<GoogleCalendarEvent[]>([]);
+  const [isLoadingCalendar, setIsLoadingCalendar] = useState<boolean>(false);
+  const [calendarFilter, setCalendarFilter] = useState<'upcoming' | 'all'>('upcoming');
+  const [calendarSearch, setCalendarSearch] = useState<string>('');
+  const [isCreateEventModalOpen, setIsCreateEventModalOpen] = useState<boolean>(false);
+  const [newEventForm, setNewEventForm] = useState<CreateEventInput>({
+    summary: '',
+    description: '',
+    location: schoolInfo.name || 'SMA Negeri 1 Nusantara',
+    startDate: new Date().toISOString().split('T')[0],
+    endDate: new Date().toISOString().split('T')[0],
+    allDay: true,
+    startTime: '08:00',
+    endTime: '10:00'
+  });
+
+  // 📧 Gmail State
+  const [gmailMessages, setGmailMessages] = useState<GmailMessageSummary[]>([]);
+  const [selectedMessage, setSelectedMessage] = useState<GmailMessageFull | null>(null);
+  const [isLoadingGmail, setIsLoadingGmail] = useState<boolean>(false);
+  const [isLoadingMessageDetail, setIsLoadingMessageDetail] = useState<boolean>(false);
+  const [gmailSearchQuery, setGmailSearchQuery] = useState<string>('');
+  const [isComposeModalOpen, setIsComposeModalOpen] = useState<boolean>(false);
+  const [composeForm, setComposeForm] = useState({
+    to: '',
+    subject: '',
+    body: ''
+  });
+
+  // 🎓 Classroom State
+  const [classroomCourses, setClassroomCourses] = useState<ClassroomCourse[]>([]);
+  const [selectedCourseId, setSelectedCourseId] = useState<string>('');
+  const [courseWorkList, setCourseWorkList] = useState<ClassroomCourseWork[]>([]);
+  const [courseAnnouncements, setCourseAnnouncements] = useState<ClassroomAnnouncement[]>([]);
+  const [courseStudents, setCourseStudents] = useState<ClassroomStudent[]>([]);
+  const [isLoadingClassroom, setIsLoadingClassroom] = useState<boolean>(false);
+  const [isLoadingCourseDetails, setIsLoadingCourseDetails] = useState<boolean>(false);
+  const [classroomSubTab, setClassroomSubTab] = useState<'work' | 'announcements' | 'students'>('work');
+  const [isCreateAnnouncementModalOpen, setIsCreateAnnouncementModalOpen] = useState<boolean>(false);
+  const [announcementText, setAnnouncementText] = useState<string>('');
+  const [isCreateWorkModalOpen, setIsCreateWorkModalOpen] = useState<boolean>(false);
+  const [newWorkForm, setNewWorkForm] = useState({
+    title: '',
+    description: '',
+    maxPoints: 100,
+    dueDate: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString().split('T')[0],
+    dueTime: '23:59'
+  });
+
+  // 🛡️ Destructive / Confirm Action Modal State
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    description: string;
+    actionType: 'delete' | 'send' | 'sync' | 'update';
+    affectedCount?: number;
+    affectedItems?: string[];
+    confirmLabel?: string;
+    onConfirm: () => Promise<void>;
+  }>({
+    isOpen: false,
+    title: '',
+    description: '',
+    actionType: 'delete',
+    onConfirm: async () => {}
+  });
+  const [isExecutingConfirm, setIsExecutingConfirm] = useState<boolean>(false);
+
+  // Initial token check
+  useEffect(() => {
+    const token = getGoogleAccessToken();
+    setAccessToken(token);
+    setGoogleUserState(getGoogleUser());
+  }, []);
+
+  // Handle Google Login
+  const handleGoogleLogin = async () => {
+    setIsAuthenticating(true);
+    try {
+      const result = await signInWithGoogle();
+      setAccessToken(result.accessToken);
+      setGoogleUserState(result.user);
+      showToast(`Berhasil menghubungkan Google Workspace (${result.user.email})!`, 'success');
+    } catch (err: any) {
+      console.error('Google login error:', err);
+      showToast(err.message || 'Gagal masuk dengan Google Workspace.', 'error');
+    } finally {
+      setIsAuthenticating(false);
+    }
+  };
+
+  const handleGoogleLogout = async () => {
+    await logoutGoogle();
+    setAccessToken(null);
+    setGoogleUserState(null);
+    setCalendarEventsList([]);
+    setGmailMessages([]);
+    setClassroomCourses([]);
+    showToast('Telah keluar dari sesi Google Workspace.', 'info');
+  };
+
+  // 📅 Fetch Calendar Events
+  const fetchCalendar = useCallback(async () => {
+    if (!accessToken) return;
+    setIsLoadingCalendar(true);
+    try {
+      const now = new Date();
+      const timeMin = calendarFilter === 'upcoming' ? now.toISOString() : undefined;
+      const events = await listGoogleCalendarEvents(accessToken, 'primary', {
+        timeMin,
+        maxResults: 40,
+        q: calendarSearch || undefined
+      });
+      setCalendarEventsList(events);
+    } catch (err: any) {
+      console.error('Failed to fetch calendar:', err);
+      if (err.message?.includes('401') || err.message?.includes('auth')) {
+        setAccessToken(null);
+        showToast('Sesi token Google telah kedaluwarsa. Silakan masuk kembali.', 'warning');
+      } else {
+        showToast(err.message || 'Gagal memuat agenda Google Calendar.', 'error');
+      }
+    } finally {
+      setIsLoadingCalendar(false);
+    }
+  }, [accessToken, calendarFilter, calendarSearch, showToast]);
+
+  // 📧 Fetch Gmail Messages
+  const fetchGmail = useCallback(async () => {
+    if (!accessToken) return;
+    setIsLoadingGmail(true);
+    try {
+      const res = await listGmailMessages(accessToken, {
+        q: gmailSearchQuery || undefined,
+        maxResults: 20
+      });
+      setGmailMessages(res.messages);
+    } catch (err: any) {
+      console.error('Failed to fetch Gmail:', err);
+      if (err.message?.includes('401') || err.message?.includes('auth')) {
+        setAccessToken(null);
+        showToast('Sesi token Google telah kedaluwarsa. Silakan masuk kembali.', 'warning');
+      } else {
+        showToast(err.message || 'Gagal memuat pesan Gmail.', 'error');
+      }
+    } finally {
+      setIsLoadingGmail(false);
+    }
+  }, [accessToken, gmailSearchQuery, showToast]);
+
+  // 🎓 Fetch Classroom Courses
+  const fetchClassroom = useCallback(async () => {
+    if (!accessToken) return;
+    setIsLoadingClassroom(true);
+    try {
+      const courses = await listClassroomCourses(accessToken);
+      setClassroomCourses(courses);
+      if (courses.length > 0 && !selectedCourseId) {
+        setSelectedCourseId(courses[0].id);
+      }
+    } catch (err: any) {
+      console.error('Failed to fetch Classroom courses:', err);
+      if (err.message?.includes('401') || err.message?.includes('auth')) {
+        setAccessToken(null);
+        showToast('Sesi token Google telah kedaluwarsa. Silakan masuk kembali.', 'warning');
+      } else {
+        showToast(err.message || 'Gagal memuat data Google Classroom.', 'error');
+      }
+    } finally {
+      setIsLoadingClassroom(false);
+    }
+  }, [accessToken, selectedCourseId, showToast]);
+
+  // Fetch Course details when selectedCourseId changes
+  useEffect(() => {
+    if (!accessToken || !selectedCourseId) return;
+
+    let isMounted = true;
+    const fetchCourseDetails = async () => {
+      setIsLoadingCourseDetails(true);
+      try {
+        const [works, ann, stus] = await Promise.all([
+          listClassroomCourseWork(accessToken, selectedCourseId).catch(() => []),
+          listClassroomAnnouncements(accessToken, selectedCourseId).catch(() => []),
+          listClassroomStudents(accessToken, selectedCourseId).catch(() => [])
+        ]);
+        if (isMounted) {
+          setCourseWorkList(works);
+          setCourseAnnouncements(ann);
+          setCourseStudents(stus);
+        }
+      } catch (err) {
+        console.warn('Error fetching course sub-details:', err);
+      } finally {
+        if (isMounted) setIsLoadingCourseDetails(false);
+      }
+    };
+
+    fetchCourseDetails();
+    return () => {
+      isMounted = false;
+    };
+  }, [accessToken, selectedCourseId]);
+
+  // Load active tab data on change
+  useEffect(() => {
+    if (!accessToken) return;
+    if (activeTab === 'calendar') fetchCalendar();
+    if (activeTab === 'gmail') fetchGmail();
+    if (activeTab === 'classroom') fetchClassroom();
+  }, [activeTab, accessToken, fetchCalendar, fetchGmail, fetchClassroom]);
+
+  // View full message detail
+  const handleSelectMessage = async (msg: GmailMessageSummary) => {
+    if (!accessToken) return;
+    setIsLoadingMessageDetail(true);
+    try {
+      const full = await getGmailMessageDetails(accessToken, msg.id);
+      setSelectedMessage(full);
+    } catch (err: any) {
+      showToast(err.message || 'Gagal membuka detail email.', 'error');
+    } finally {
+      setIsLoadingMessageDetail(false);
+    }
+  };
+
+  // ----------------------------------------------------
+  // Action Handlers with Explicit User Confirmation Modals
+  // ----------------------------------------------------
+
+  // 1. Create Calendar Event
+  const handleCreateEventSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newEventForm.summary.trim()) {
+      showToast('Judul agenda tidak boleh kosong!', 'error');
+      return;
+    }
+    if (!accessToken) return;
+
+    try {
+      await createGoogleCalendarEvent(accessToken, newEventForm);
+      showToast(`Agenda '${newEventForm.summary}' berhasil ditambahkan ke Google Calendar!`, 'success');
+      setIsCreateEventModalOpen(false);
+      setNewEventForm({
+        summary: '',
+        description: '',
+        location: schoolInfo.name,
+        startDate: new Date().toISOString().split('T')[0],
+        endDate: new Date().toISOString().split('T')[0],
+        allDay: true,
+        startTime: '08:00',
+        endTime: '10:00'
+      });
+      fetchCalendar();
+    } catch (err: any) {
+      showToast(err.message || 'Gagal membuat agenda Google Calendar.', 'error');
+    }
+  };
+
+  // 2. Delete Calendar Event (Destructive -> Requires Confirmation)
+  const promptDeleteEvent = (event: GoogleCalendarEvent) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Hapus Agenda Google Calendar?',
+      description: `Apakah Anda yakin ingin menghapus agenda "${event.summary || 'Tanpa Judul'}" secara permanen dari akun Google Calendar Anda? Tindakan ini tidak dapat dibatalkan.`,
+      actionType: 'delete',
+      affectedCount: 1,
+      affectedItems: [event.summary || 'Agenda Google Calendar'],
+      confirmLabel: 'Hapus Agenda',
+      onConfirm: async () => {
+        if (!accessToken) return;
+        await deleteGoogleCalendarEvent(accessToken, event.id);
+        showToast(`Agenda "${event.summary}" telah dihapus.`, 'info');
+        fetchCalendar();
+      }
+    });
+  };
+
+  // 3. Batch Sync School Calendar to Google Calendar
+  const promptSyncAllSchoolEvents = () => {
+    if (calendarEvents.length === 0) {
+      showToast('Tidak ada agenda kalender akademik sekolah untuk disinkronkan.', 'warning');
+      return;
+    }
+
+    setConfirmModal({
+      isOpen: true,
+      title: 'Sinkronkan Kalender Akademik Sekolah ke Google Calendar?',
+      description: `Sistem akan menambahkan ${calendarEvents.length} agenda kegiatan akademik, ujian, dan hari libur sekolah ke akun Google Calendar pribadi Anda.`,
+      actionType: 'sync',
+      affectedCount: calendarEvents.length,
+      affectedItems: calendarEvents.slice(0, 5).map(e => `[${e.date}] ${e.title}`),
+      confirmLabel: 'Mulai Sinkronisasi',
+      onConfirm: async () => {
+        if (!accessToken) return;
+        const result = await syncSchoolEventsToGoogleCalendar(accessToken, calendarEvents, schoolInfo.name);
+        showToast(`Berhasil menyinkronkan ${result.successCount} agenda sekolah ke Google Calendar!`, 'success');
+        fetchCalendar();
+      }
+    });
+  };
+
+  // 4. Send Gmail Email (Mutating -> Requires Confirmation)
+  const promptSendEmail = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!composeForm.to.trim() || !composeForm.subject.trim() || !composeForm.body.trim()) {
+      showToast('Semua kolom email (Penerima, Subjek, Pesan) wajib diisi!', 'error');
+      return;
+    }
+
+    setConfirmModal({
+      isOpen: true,
+      title: 'Kirim Pesan Email Melalui Akun Gmail Anda?',
+      description: `Pesan email akan dikirimkan secara langsung ke alamat "${composeForm.to}" menggunakan akun Google Workspace terhubung. Pastikan isi surat sudah sesuai.`,
+      actionType: 'send',
+      affectedCount: 1,
+      affectedItems: [`Kepada: ${composeForm.to}`, `Subjek: ${composeForm.subject}`],
+      confirmLabel: 'Kirim Email Sekarang',
+      onConfirm: async () => {
+        if (!accessToken) return;
+        await sendGmailEmail(accessToken, {
+          to: composeForm.to,
+          subject: composeForm.subject,
+          body: composeForm.body,
+          isHtml: true
+        });
+        showToast(`Email berhasil dikirim ke ${composeForm.to}!`, 'success');
+        setIsComposeModalOpen(false);
+        setComposeForm({ to: '', subject: '', body: '' });
+        fetchGmail();
+      }
+    });
+  };
+
+  // 5. Trash Gmail Message (Destructive -> Requires Confirmation)
+  const promptTrashEmail = (msg: GmailMessageSummary | GmailMessageFull) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Pindahkan Email ke Kotak Sampah?',
+      description: `Surat email "${msg.subject || '(Tanpa Subjek)'}" dari ${msg.fromName || msg.from} akan dipindahkan ke folder Sampah (Trash) di Gmail Anda.`,
+      actionType: 'delete',
+      affectedCount: 1,
+      affectedItems: [`Subjek: ${msg.subject}`, `Dari: ${msg.from}`],
+      confirmLabel: 'Pindahkan ke Sampah',
+      onConfirm: async () => {
+        if (!accessToken) return;
+        await trashGmailMessage(accessToken, msg.id);
+        showToast('Email telah dipindahkan ke folder Sampah.', 'info');
+        setSelectedMessage(null);
+        fetchGmail();
+      }
+    });
+  };
+
+  // 6. Post Classroom Announcement
+  const handlePostAnnouncement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!announcementText.trim() || !selectedCourseId || !accessToken) return;
+
+    try {
+      await createClassroomAnnouncement(accessToken, selectedCourseId, announcementText);
+      showToast('Pengumuman berhasil diposting ke Google Classroom!', 'success');
+      setAnnouncementText('');
+      setIsCreateAnnouncementModalOpen(false);
+      // reload announcements
+      const ann = await listClassroomAnnouncements(accessToken, selectedCourseId);
+      setCourseAnnouncements(ann);
+    } catch (err: any) {
+      showToast(err.message || 'Gagal memposting pengumuman.', 'error');
+    }
+  };
+
+  // 7. Create CourseWork Assignment
+  const handleCreateCourseWork = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newWorkForm.title.trim() || !selectedCourseId || !accessToken) return;
+
+    try {
+      const [year, month, day] = newWorkForm.dueDate.split('-').map(Number);
+      const [hours, minutes] = newWorkForm.dueTime.split(':').map(Number);
+
+      await createClassroomCourseWork(accessToken, selectedCourseId, {
+        title: newWorkForm.title,
+        description: newWorkForm.description,
+        maxPoints: Number(newWorkForm.maxPoints) || 100,
+        workType: 'ASSIGNMENT',
+        dueYear: year,
+        dueMonth: month,
+        dueDay: day,
+        dueHours: hours,
+        dueMinutes: minutes
+      });
+
+      showToast(`Tugas '${newWorkForm.title}' berhasil dibuat di Google Classroom!`, 'success');
+      setIsCreateWorkModalOpen(false);
+      setNewWorkForm({
+        title: '',
+        description: '',
+        maxPoints: 100,
+        dueDate: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString().split('T')[0],
+        dueTime: '23:59'
+      });
+      // reload works
+      const works = await listClassroomCourseWork(accessToken, selectedCourseId);
+      setCourseWorkList(works);
+    } catch (err: any) {
+      showToast(err.message || 'Gagal membuat tugas di Google Classroom.', 'error');
+    }
+  };
+
+  // 8. Delete CourseWork (Destructive -> Requires Confirmation)
+  const promptDeleteCourseWork = (work: ClassroomCourseWork) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Hapus Tugas Google Classroom?',
+      description: `Apakah Anda yakin ingin menghapus tugas "${work.title}" dari kelas Google Classroom ini? Semua lampiran dan nilai terkait akan dihapus.`,
+      actionType: 'delete',
+      affectedCount: 1,
+      affectedItems: [`Tugas: ${work.title}`],
+      confirmLabel: 'Hapus Tugas',
+      onConfirm: async () => {
+        if (!accessToken || !selectedCourseId) return;
+        await deleteClassroomCourseWork(accessToken, selectedCourseId, work.id);
+        showToast(`Tugas "${work.title}" berhasil dihapus.`, 'info');
+        const works = await listClassroomCourseWork(accessToken, selectedCourseId);
+        setCourseWorkList(works);
+      }
+    });
+  };
+
+  // Modal confirm executor
+  const handleExecuteModalConfirm = async () => {
+    setIsExecutingConfirm(true);
+    try {
+      await confirmModal.onConfirm();
+      setConfirmModal(prev => ({ ...prev, isOpen: false }));
+    } catch (err: any) {
+      showToast(err.message || 'Terjadi kesalahan saat mengeksekusi operasi.', 'error');
+    } finally {
+      setIsExecutingConfirm(false);
+    }
+  };
+
+  const selectedCourse = classroomCourses.find(c => c.id === selectedCourseId);
+
+  return (
+    <div className="space-y-6 pb-16 animate-fade-in">
+      {/* Header Banner & Title */}
+      <div className="bg-gradient-to-r from-[#5A5A40] via-[#4D4D36] to-[#383827] rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden">
+        <div className="absolute right-0 top-0 translate-x-8 -translate-y-8 w-64 h-64 bg-white/10 rounded-full blur-2xl pointer-events-none" />
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/20 backdrop-blur-md rounded-full text-xs font-bold tracking-wider uppercase">
+              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+              <span>Integrasi Resmi Google Workspace</span>
+            </div>
+            <h1 className="font-serif text-2xl sm:text-3xl font-bold tracking-tight">
+              Google Workspace Hub
+            </h1>
+            <p className="text-sm text-white/85 max-w-2xl leading-relaxed">
+              Akses, kelola, dan sinkronkan agenda <strong>Google Calendar</strong>, kotak masuk surat <strong>Gmail</strong>, dan materi kelas <strong>Google Classroom</strong> secara terintegrasi langsung di portal sekolah.
+            </p>
+          </div>
+
+          {/* Account Status / Connect Button */}
+          <div className="shrink-0">
+            {accessToken && googleUser ? (
+              <div className="bg-white/15 backdrop-blur-md border border-white/25 rounded-2xl p-3.5 flex items-center gap-3">
+                {googleUser.photoURL ? (
+                  <img
+                    src={googleUser.photoURL}
+                    alt={googleUser.displayName || 'Google User'}
+                    className="w-10 h-10 rounded-full object-cover border-2 border-emerald-400 shrink-0"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-emerald-500 text-white flex items-center justify-center font-bold text-base">
+                    {googleUser.displayName?.[0] || 'G'}
+                  </div>
+                )}
+                <div className="text-left">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    <span className="text-xs font-bold text-emerald-300">Terhubung Resmi</span>
+                  </div>
+                  <div className="font-semibold text-xs text-white line-clamp-1 max-w-[180px]">
+                    {googleUser.displayName || googleUser.email}
+                  </div>
+                  <div className="text-[10px] text-white/70 line-clamp-1 max-w-[180px]">
+                    {googleUser.email}
+                  </div>
+                </div>
+                <button
+                  onClick={handleGoogleLogout}
+                  className="p-1.5 hover:bg-white/20 rounded-lg text-white/80 hover:text-white transition-colors cursor-pointer ml-1"
+                  title="Putuskan Hubungan Google"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <GoogleSignInButton
+                onClick={handleGoogleLogin}
+                isLoading={isAuthenticating}
+                text="Hubungkan Google Workspace"
+                className="shadow-lg"
+              />
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* If Not Connected Notice */}
+      {!accessToken && (
+        <div className="bg-white dark:bg-[#1E1E1C] rounded-2xl p-8 border border-[#E0E0D8] dark:border-[#383832] shadow-sm text-center space-y-4">
+          <div className="w-16 h-16 rounded-2xl bg-[#5A5A40]/10 dark:bg-[#5A5A40]/30 text-[#5A5A40] dark:text-[#C5C5B0] flex items-center justify-center mx-auto">
+            <GraduationCap className="w-8 h-8" />
+          </div>
+          <div className="max-w-md mx-auto space-y-2">
+            <h3 className="font-serif text-lg font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">
+              Hubungkan Akun Google untuk Mengaktifkan Fitur
+            </h3>
+            <p className="text-xs text-[#666] dark:text-[#AAA] leading-relaxed">
+              Akses Google Calendar, Gmail, dan Google Classroom membutuhkan izin resmi dari akun Google Anda. Klik tombol di bawah ini untuk memulai integrasi.
+            </p>
+          </div>
+          <div className="pt-2">
+            <GoogleSignInButton
+              onClick={handleGoogleLogin}
+              isLoading={isAuthenticating}
+              text="Masuk dengan Google (Calendar, Gmail, Classroom)"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Main Feature Tabs (When Connected) */}
+      {accessToken && (
+        <>
+          {/* Navigation Bar Tabs */}
+          <div className="flex items-center justify-between border-b border-[#E0E0D8] dark:border-[#383832] pb-2 overflow-x-auto gap-2">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setActiveTab('calendar')}
+                className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  activeTab === 'calendar'
+                    ? 'bg-[#5A5A40] text-white shadow-md'
+                    : 'bg-white dark:bg-[#1E1E1C] text-[#666] dark:text-[#AAA] hover:bg-[#F5F5F0] dark:hover:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B]'
+                }`}
+              >
+                <Calendar className="w-4 h-4" />
+                <span>Google Calendar</span>
+                <span className={`px-1.5 py-0.5 rounded-md text-[10px] ${activeTab === 'calendar' ? 'bg-white/20 text-white' : 'bg-[#F5F5F0] dark:bg-[#282825] text-[#555]'}`}>
+                  {calendarEventsList.length}
+                </span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('gmail')}
+                className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  activeTab === 'gmail'
+                    ? 'bg-[#8C4A32] text-white shadow-md'
+                    : 'bg-white dark:bg-[#1E1E1C] text-[#666] dark:text-[#AAA] hover:bg-[#F5F5F0] dark:hover:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B]'
+                }`}
+              >
+                <Mail className="w-4 h-4" />
+                <span>Gmail</span>
+                <span className={`px-1.5 py-0.5 rounded-md text-[10px] ${activeTab === 'gmail' ? 'bg-white/20 text-white' : 'bg-[#F5F5F0] dark:bg-[#282825] text-[#555]'}`}>
+                  {gmailMessages.length}
+                </span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('classroom')}
+                className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  activeTab === 'classroom'
+                    ? 'bg-[#2E6F40] text-white shadow-md'
+                    : 'bg-white dark:bg-[#1E1E1C] text-[#666] dark:text-[#AAA] hover:bg-[#F5F5F0] dark:hover:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B]'
+                }`}
+              >
+                <GraduationCap className="w-4 h-4" />
+                <span>Google Classroom</span>
+                <span className={`px-1.5 py-0.5 rounded-md text-[10px] ${activeTab === 'classroom' ? 'bg-white/20 text-white' : 'bg-[#F5F5F0] dark:bg-[#282825] text-[#555]'}`}>
+                  {classroomCourses.length} Kelas
+                </span>
+              </button>
+            </div>
+
+            {/* Refresh Active Tab Data Button */}
+            <button
+              onClick={() => {
+                if (activeTab === 'calendar') fetchCalendar();
+                if (activeTab === 'gmail') fetchGmail();
+                if (activeTab === 'classroom') fetchClassroom();
+              }}
+              className="p-2.5 rounded-xl bg-white dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#42423B] text-[#5A5A40] dark:text-[#C5C5B0] hover:bg-[#F5F5F0] dark:hover:bg-[#282825] transition-all cursor-pointer shrink-0"
+              title="Perbarui data dari server Google"
+            >
+              <RefreshCw className={`w-4 h-4 ${isLoadingCalendar || isLoadingGmail || isLoadingClassroom ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+
+          {/* ========================================================================= */}
+          {/* TAB 1: GOOGLE CALENDAR                                                    */}
+          {/* ========================================================================= */}
+          {activeTab === 'calendar' && (
+            <div className="space-y-6">
+              {/* Calendar Action & Filter Bar */}
+              <div className="bg-white dark:bg-[#1E1E1C] rounded-2xl p-4 sm:p-5 border border-[#E0E0D8] dark:border-[#383832] shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="relative flex-1 sm:w-64">
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#8E8E85]" />
+                    <input
+                      type="text"
+                      placeholder="Cari agenda calendar..."
+                      value={calendarSearch}
+                      onChange={e => setCalendarSearch(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && fetchCalendar()}
+                      className="w-full pl-9 pr-3 py-2 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs text-[#2D2D2A] dark:text-[#EAEAE2] focus:outline-none focus:ring-2 focus:ring-[#5A5A40]"
+                    />
+                  </div>
+
+                  <div className="inline-flex rounded-xl bg-[#F5F5F0] dark:bg-[#282825] p-1 border border-[#E0E0D8] dark:border-[#42423B] text-xs">
+                    <button
+                      onClick={() => setCalendarFilter('upcoming')}
+                      className={`px-3 py-1 rounded-lg font-bold transition-colors cursor-pointer ${
+                        calendarFilter === 'upcoming'
+                          ? 'bg-[#5A5A40] text-white'
+                          : 'text-[#666] dark:text-[#AAA]'
+                      }`}
+                    >
+                      Mendatang
+                    </button>
+                    <button
+                      onClick={() => setCalendarFilter('all')}
+                      className={`px-3 py-1 rounded-lg font-bold transition-colors cursor-pointer ${
+                        calendarFilter === 'all'
+                          ? 'bg-[#5A5A40] text-white'
+                          : 'text-[#666] dark:text-[#AAA]'
+                      }`}
+                    >
+                      Semua
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <button
+                    onClick={promptSyncAllSchoolEvents}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-[#F5F5F0] dark:bg-[#282825] hover:bg-[#EAEAE5] dark:hover:bg-[#33332D] text-[#5A5A40] dark:text-[#C5C5B0] border border-[#E0E0D8] dark:border-[#42423B] transition-all cursor-pointer shadow-xs active:scale-95"
+                    title="Sinkronkan semua jadwal akademik sekolah ke Google Calendar Anda"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Sinkronkan Kalender Sekolah ({calendarEvents.length})</span>
+                  </button>
+
+                  <button
+                    onClick={() => setIsCreateEventModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-[#5A5A40] hover:bg-[#484833] text-white transition-all cursor-pointer shadow-sm active:scale-95"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Buat Agenda Baru</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Calendar Events Grid / List */}
+              {isLoadingCalendar ? (
+                <div className="p-12 text-center bg-white dark:bg-[#1E1E1C] rounded-2xl border border-[#E0E0D8] dark:border-[#383832]">
+                  <div className="w-8 h-8 border-3 border-[#5A5A40] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                  <p className="text-xs text-[#8E8E85]">Memuat agenda Google Calendar Anda...</p>
+                </div>
+              ) : calendarEventsList.length === 0 ? (
+                <div className="p-12 text-center bg-white dark:bg-[#1E1E1C] rounded-2xl border border-[#E0E0D8] dark:border-[#383832] space-y-3">
+                  <CalendarDays className="w-12 h-12 text-[#8E8E85] mx-auto opacity-50" />
+                  <h4 className="font-bold text-sm text-[#2D2D2A] dark:text-[#F0F0EA]">Belum Ada Agenda Google Calendar</h4>
+                  <p className="text-xs text-[#8E8E85] max-w-sm mx-auto">
+                    Anda dapat membuat agenda baru secara langsung atau menyinkronkan seluruh agenda akademik sekolah ke akun Google Calendar Anda.
+                  </p>
+                  <div className="pt-2 flex justify-center gap-3">
+                    <button
+                      onClick={promptSyncAllSchoolEvents}
+                      className="px-4 py-2 bg-[#5A5A40] text-white rounded-xl text-xs font-bold cursor-pointer"
+                    >
+                      Sinkronkan Kalender Sekolah Sekarang
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {calendarEventsList.map(event => {
+                    const startDateStr = event.start.date || event.start.dateTime;
+                    const isAllDay = Boolean(event.start.date);
+                    const formattedDate = startDateStr
+                      ? new Date(startDateStr).toLocaleDateString('id-ID', {
+                          weekday: 'short',
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric'
+                        })
+                      : 'Tanggal tidak ditentukan';
+
+                    const formattedTime = !isAllDay && event.start.dateTime
+                      ? new Date(event.start.dateTime).toLocaleTimeString('id-ID', {
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })
+                      : 'Sepanjang Hari';
+
+                    return (
+                      <div
+                        key={event.id}
+                        className="bg-white dark:bg-[#1E1E1C] rounded-2xl p-5 border border-[#E0E0D8] dark:border-[#383832] shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-4 group"
+                      >
+                        <div className="space-y-2.5">
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-[#5A5A40]/10 text-[#5A5A40] dark:bg-[#5A5A40]/30 dark:text-[#D1D1BE]">
+                              <Clock className="w-3 h-3" />
+                              <span>{formattedTime}</span>
+                            </span>
+                            <button
+                              onClick={() => promptDeleteEvent(event)}
+                              className="opacity-0 group-hover:opacity-100 p-1.5 text-[#8E8E85] hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-all cursor-pointer"
+                              title="Hapus agenda dari Google Calendar"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                          <h4 className="font-bold text-sm text-[#2D2D2A] dark:text-[#F0F0EA] leading-snug line-clamp-2">
+                            {event.summary || '(Tanpa Judul)'}
+                          </h4>
+
+                          <div className="text-xs text-[#8E8E85] space-y-1">
+                            <div className="flex items-center gap-1.5 font-medium">
+                              <Calendar className="w-3.5 h-3.5 shrink-0 text-[#5A5A40] dark:text-[#A4A485]" />
+                              <span>{formattedDate}</span>
+                            </div>
+                            {event.location && (
+                              <div className="flex items-center gap-1.5 line-clamp-1">
+                                <MapPin className="w-3.5 h-3.5 shrink-0 text-[#8C4A32]" />
+                                <span>{event.location}</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {event.description && (
+                            <p className="text-xs text-[#666] dark:text-[#AAA] line-clamp-3 leading-relaxed pt-1 border-t border-[#E0E0D8]/60 dark:border-[#383832]/60">
+                              {event.description}
+                            </p>
+                          )}
+                        </div>
+
+                        {event.htmlLink && (
+                          <a
+                            href={event.htmlLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center justify-center gap-1.5 w-full py-2 bg-[#F5F5F0] dark:bg-[#282825] hover:bg-[#EAEAE5] dark:hover:bg-[#33332D] text-[#5A5A40] dark:text-[#C5C5B0] rounded-xl text-xs font-bold transition-colors"
+                          >
+                            <span>Buka di Google Calendar</span>
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* TAB 2: GMAIL                                                              */}
+          {/* ========================================================================= */}
+          {activeTab === 'gmail' && (
+            <div className="space-y-6">
+              {/* Gmail Action Bar */}
+              <div className="bg-white dark:bg-[#1E1E1C] rounded-2xl p-4 sm:p-5 border border-[#E0E0D8] dark:border-[#383832] shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+                <div className="relative flex-1 sm:w-80">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#8E8E85]" />
+                  <input
+                    type="text"
+                    placeholder="Cari surat di kotak masuk Gmail..."
+                    value={gmailSearchQuery}
+                    onChange={e => setGmailSearchQuery(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && fetchGmail()}
+                    className="w-full pl-9 pr-3 py-2 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs text-[#2D2D2A] dark:text-[#EAEAE2] focus:outline-none focus:ring-2 focus:ring-[#8C4A32]"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2.5">
+                  <button
+                    onClick={() => setIsComposeModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-[#8C4A32] hover:bg-[#723B28] text-white transition-all cursor-pointer shadow-sm active:scale-95"
+                  >
+                    <MailCheck className="w-3.5 h-3.5" />
+                    <span>Tulis Email Baru</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Gmail Messages & Preview Layout */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                {/* Email List Column (Left) */}
+                <div className={`${selectedMessage ? 'hidden lg:block lg:col-span-5' : 'col-span-12'} space-y-2`}>
+                  {isLoadingGmail ? (
+                    <div className="p-12 text-center bg-white dark:bg-[#1E1E1C] rounded-2xl border border-[#E0E0D8] dark:border-[#383832]">
+                      <div className="w-8 h-8 border-3 border-[#8C4A32] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                      <p className="text-xs text-[#8E8E85]">Memuat kotak masuk Gmail Anda...</p>
+                    </div>
+                  ) : gmailMessages.length === 0 ? (
+                    <div className="p-12 text-center bg-white dark:bg-[#1E1E1C] rounded-2xl border border-[#E0E0D8] dark:border-[#383832] space-y-3">
+                      <Inbox className="w-12 h-12 text-[#8E8E85] mx-auto opacity-50" />
+                      <h4 className="font-bold text-sm text-[#2D2D2A] dark:text-[#F0F0EA]">Kotak Masuk Kosong</h4>
+                      <p className="text-xs text-[#8E8E85] max-w-sm mx-auto">
+                        Tidak ditemukan surat di kotak masuk Anda atau filter pencarian tidak cocok.
+                      </p>
+                    </div>
+                  ) : (
+                    gmailMessages.map(msg => (
+                      <div
+                        key={msg.id}
+                        onClick={() => handleSelectMessage(msg)}
+                        className={`p-4 rounded-2xl border transition-all cursor-pointer shadow-xs hover:shadow-md ${
+                          selectedMessage?.id === msg.id
+                            ? 'bg-[#8C4A32]/10 border-[#8C4A32] dark:bg-[#8C4A32]/20 dark:border-[#8C4A32]'
+                            : 'bg-white dark:bg-[#1E1E1C] border-[#E0E0D8] dark:border-[#383832] hover:bg-[#FBFBFA] dark:hover:bg-[#252522]'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <span className="font-bold text-xs text-[#2D2D2A] dark:text-[#F0F0EA] line-clamp-1">
+                            {msg.fromName || msg.from}
+                          </span>
+                          <span className="text-[10px] text-[#8E8E85] shrink-0 font-medium">
+                            {msg.date ? new Date(msg.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }) : ''}
+                          </span>
+                        </div>
+                        <h4 className={`text-xs ${msg.unread ? 'font-extrabold text-[#2D2D2A] dark:text-white' : 'font-semibold text-[#555] dark:text-[#CCC]'} line-clamp-1 mb-1`}>
+                          {msg.subject || '(Tanpa Subjek)'}
+                        </h4>
+                        <p className="text-[11px] text-[#8E8E85] line-clamp-2 leading-relaxed">
+                          {msg.snippet}
+                        </p>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* Email Content Detail View (Right) */}
+                {selectedMessage && (
+                  <div className="col-span-12 lg:col-span-7 bg-white dark:bg-[#1E1E1C] rounded-2xl p-6 border border-[#E0E0D8] dark:border-[#383832] shadow-sm space-y-5">
+                    <div className="flex items-center justify-between gap-4 pb-4 border-b border-[#E0E0D8] dark:border-[#383832]">
+                      <button
+                        onClick={() => setSelectedMessage(null)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#F5F5F0] dark:bg-[#282825] hover:bg-[#EAEAE5] dark:hover:bg-[#33332D] text-[#555] dark:text-[#CCC] rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                        <span>Tutup Pesan</span>
+                      </button>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => promptTrashEmail(selectedMessage)}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Hapus Surat</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      <h3 className="font-serif text-lg font-bold text-[#2D2D2A] dark:text-[#F0F0EA] leading-snug">
+                        {selectedMessage.subject}
+                      </h3>
+
+                      <div className="bg-[#F5F5F0] dark:bg-[#282825] p-3.5 rounded-xl text-xs space-y-1 border border-[#E0E0D8] dark:border-[#42423B]">
+                        <div className="flex items-center justify-between">
+                          <div><strong>Pengirim:</strong> {selectedMessage.fromName} &lt;{selectedMessage.from}&gt;</div>
+                          <span className="text-[10px] text-[#8E8E85]">{selectedMessage.date}</span>
+                        </div>
+                        {selectedMessage.to && <div><strong>Kepada:</strong> {selectedMessage.to}</div>}
+                      </div>
+                    </div>
+
+                    {/* Render Email Body safely */}
+                    <div className="pt-2 text-xs text-[#2D2D2A] dark:text-[#EAEAE2] leading-relaxed max-h-[500px] overflow-y-auto bg-white dark:bg-[#121211] p-4 rounded-xl border border-[#E0E0D8] dark:border-[#383832]">
+                      {selectedMessage.bodyHtml ? (
+                        <div
+                          dangerouslySetInnerHTML={{ __html: selectedMessage.bodyHtml }}
+                          className="prose dark:prose-invert max-w-none text-xs"
+                        />
+                      ) : (
+                        <pre className="whitespace-pre-wrap font-sans text-xs">
+                          {selectedMessage.bodyText}
+                        </pre>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* TAB 3: GOOGLE CLASSROOM                                                   */}
+          {/* ========================================================================= */}
+          {activeTab === 'classroom' && (
+            <div className="space-y-6">
+              {/* Course Selector & Classroom Actions */}
+              <div className="bg-white dark:bg-[#1E1E1C] rounded-2xl p-4 sm:p-5 border border-[#E0E0D8] dark:border-[#383832] shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-bold text-[#2D2D2A] dark:text-[#F0F0EA] shrink-0">
+                    Pilih Kelas:
+                  </span>
+                  <select
+                    value={selectedCourseId}
+                    onChange={e => setSelectedCourseId(e.target.value)}
+                    className="flex-1 sm:w-72 px-3 py-2 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs font-semibold text-[#2D2D2A] dark:text-[#EAEAE2] focus:outline-none focus:ring-2 focus:ring-[#2E6F40]"
+                  >
+                    {classroomCourses.map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} {c.section ? `(${c.section})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <button
+                    onClick={() => setIsCreateAnnouncementModalOpen(true)}
+                    disabled={!selectedCourseId}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-[#F5F5F0] dark:bg-[#282825] hover:bg-[#EAEAE5] dark:hover:bg-[#33332D] text-[#2E6F40] dark:text-emerald-400 border border-[#E0E0D8] dark:border-[#42423B] transition-all cursor-pointer shadow-xs active:scale-95 disabled:opacity-50"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    <span>Buat Pengumuman</span>
+                  </button>
+
+                  <button
+                    onClick={() => setIsCreateWorkModalOpen(true)}
+                    disabled={!selectedCourseId}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-[#2E6F40] hover:bg-[#255833] text-white transition-all cursor-pointer shadow-sm active:scale-95 disabled:opacity-50"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Buat Tugas Baru</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Course Info Banner */}
+              {selectedCourse && (
+                <div className="bg-[#2E6F40] text-white rounded-2xl p-5 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <h3 className="font-serif text-lg font-bold">
+                      {selectedCourse.name}
+                    </h3>
+                    <p className="text-xs text-white/80">
+                      {selectedCourse.section || selectedCourse.descriptionHeading || 'Ruang Kelas Pembelajaran Google Classroom'}
+                    </p>
+                    {selectedCourse.enrollmentCode && (
+                      <div className="text-[11px] text-white/90">
+                        Kode Kelas: <strong className="font-mono bg-white/20 px-2 py-0.5 rounded tracking-wider">{selectedCourse.enrollmentCode}</strong>
+                      </div>
+                    )}
+                  </div>
+                  {selectedCourse.alternateLink && (
+                    <a
+                      href={selectedCourse.alternateLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white text-[#2E6F40] font-bold rounded-xl text-xs hover:bg-[#F5F5F0] transition-colors shrink-0"
+                    >
+                      <span>Buka di Google Classroom</span>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  )}
+                </div>
+              )}
+
+              {/* Sub-Tabs for Course (Tugas / Pengumuman / Anggota) */}
+              <div className="flex items-center gap-2 border-b border-[#E0E0D8] dark:border-[#383832] pb-2 text-xs">
+                <button
+                  onClick={() => setClassroomSubTab('work')}
+                  className={`px-4 py-2 rounded-xl font-bold transition-colors cursor-pointer ${
+                    classroomSubTab === 'work'
+                      ? 'bg-[#2E6F40] text-white'
+                      : 'bg-white dark:bg-[#1E1E1C] text-[#666] dark:text-[#AAA] border border-[#E0E0D8] dark:border-[#42423B]'
+                  }`}
+                >
+                  Tugas & CourseWork ({courseWorkList.length})
+                </button>
+                <button
+                  onClick={() => setClassroomSubTab('announcements')}
+                  className={`px-4 py-2 rounded-xl font-bold transition-colors cursor-pointer ${
+                    classroomSubTab === 'announcements'
+                      ? 'bg-[#2E6F40] text-white'
+                      : 'bg-white dark:bg-[#1E1E1C] text-[#666] dark:text-[#AAA] border border-[#E0E0D8] dark:border-[#42423B]'
+                  }`}
+                >
+                  Pengumuman Kelas ({courseAnnouncements.length})
+                </button>
+                <button
+                  onClick={() => setClassroomSubTab('students')}
+                  className={`px-4 py-2 rounded-xl font-bold transition-colors cursor-pointer ${
+                    classroomSubTab === 'students'
+                      ? 'bg-[#2E6F40] text-white'
+                      : 'bg-white dark:bg-[#1E1E1C] text-[#666] dark:text-[#AAA] border border-[#E0E0D8] dark:border-[#42423B]'
+                  }`}
+                >
+                  Daftar Siswa ({courseStudents.length})
+                </button>
+              </div>
+
+              {/* Course Content Lists */}
+              {isLoadingCourseDetails ? (
+                <div className="p-12 text-center bg-white dark:bg-[#1E1E1C] rounded-2xl border border-[#E0E0D8] dark:border-[#383832]">
+                  <div className="w-8 h-8 border-3 border-[#2E6F40] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                  <p className="text-xs text-[#8E8E85]">Memuat data tugas dan pengumuman kelas...</p>
+                </div>
+              ) : classroomSubTab === 'work' ? (
+                courseWorkList.length === 0 ? (
+                  <div className="p-12 text-center bg-white dark:bg-[#1E1E1C] rounded-2xl border border-[#E0E0D8] dark:border-[#383832] space-y-3">
+                    <FileText className="w-12 h-12 text-[#8E8E85] mx-auto opacity-50" />
+                    <h4 className="font-bold text-sm text-[#2D2D2A] dark:text-[#F0F0EA]">Belum Ada Tugas di Kelas Ini</h4>
+                    <p className="text-xs text-[#8E8E85]">
+                      Buat tugas baru untuk dibagikan kepada seluruh siswa di Google Classroom.
+                    </p>
+                    <button
+                      onClick={() => setIsCreateWorkModalOpen(true)}
+                      className="px-4 py-2 bg-[#2E6F40] text-white rounded-xl text-xs font-bold cursor-pointer mt-2"
+                    >
+                      Buat Tugas Pertama
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {courseWorkList.map(work => (
+                      <div
+                        key={work.id}
+                        className="bg-white dark:bg-[#1E1E1C] rounded-2xl p-5 border border-[#E0E0D8] dark:border-[#383832] shadow-xs hover:shadow-md transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 group"
+                      >
+                        <div className="space-y-1.5">
+                          <div className="flex items-center gap-2">
+                            <span className="px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-[#2E6F40]/10 text-[#2E6F40] dark:bg-[#2E6F40]/30 dark:text-emerald-300">
+                              {work.workType || 'ASSIGNMENT'}
+                            </span>
+                            <span className="text-[11px] text-[#8E8E85]">
+                              Max Nilai: <strong>{work.maxPoints || 100} poin</strong>
+                            </span>
+                          </div>
+                          <h4 className="font-bold text-sm text-[#2D2D2A] dark:text-[#F0F0EA]">
+                            {work.title}
+                          </h4>
+                          {work.description && (
+                            <p className="text-xs text-[#666] dark:text-[#AAA] line-clamp-2 leading-relaxed">
+                              {work.description}
+                            </p>
+                          )}
+                          {work.dueDate && (
+                            <div className="text-[11px] text-[#8C4A32] font-semibold flex items-center gap-1">
+                              <Clock className="w-3.5 h-3.5" />
+                              <span>Tenggat: {work.dueDate.day}/{work.dueDate.month}/{work.dueDate.year}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          {work.alternateLink && (
+                            <a
+                              href={work.alternateLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-3 py-1.5 bg-[#F5F5F0] dark:bg-[#282825] hover:bg-[#EAEAE5] dark:hover:bg-[#33332D] text-[#2E6F40] dark:text-emerald-400 rounded-xl text-xs font-bold transition-colors inline-flex items-center gap-1"
+                            >
+                              <span>Buka Tugas</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          )}
+                          <button
+                            onClick={() => promptDeleteCourseWork(work)}
+                            className="p-1.5 text-[#8E8E85] hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-colors cursor-pointer"
+                            title="Hapus tugas"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )
+              ) : classroomSubTab === 'announcements' ? (
+                courseAnnouncements.length === 0 ? (
+                  <div className="p-12 text-center bg-white dark:bg-[#1E1E1C] rounded-2xl border border-[#E0E0D8] dark:border-[#383832] space-y-2">
+                    <MessageSquare className="w-12 h-12 text-[#8E8E85] mx-auto opacity-50" />
+                    <h4 className="font-bold text-sm text-[#2D2D2A] dark:text-[#F0F0EA]">Belum Ada Pengumuman</h4>
+                    <p className="text-xs text-[#8E8E85]">Bagikan info penting ke forum Google Classroom.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {courseAnnouncements.map(ann => (
+                      <div
+                        key={ann.id}
+                        className="bg-white dark:bg-[#1E1E1C] rounded-2xl p-5 border border-[#E0E0D8] dark:border-[#383832] shadow-xs space-y-2"
+                      >
+                        <div className="flex items-center justify-between text-[11px] text-[#8E8E85]">
+                          <span>Diposting: {ann.creationTime ? new Date(ann.creationTime).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'}</span>
+                          {ann.alternateLink && (
+                            <a href={ann.alternateLink} target="_blank" rel="noopener noreferrer" className="text-[#2E6F40] hover:underline inline-flex items-center gap-1 font-semibold">
+                              <span>Lihat di Classroom</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          )}
+                        </div>
+                        <p className="text-xs text-[#2D2D2A] dark:text-[#EAEAE2] whitespace-pre-wrap leading-relaxed">
+                          {ann.text}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )
+              ) : (
+                courseStudents.length === 0 ? (
+                  <div className="p-12 text-center bg-white dark:bg-[#1E1E1C] rounded-2xl border border-[#E0E0D8] dark:border-[#383832] space-y-2">
+                    <Users className="w-12 h-12 text-[#8E8E85] mx-auto opacity-50" />
+                    <h4 className="font-bold text-sm text-[#2D2D2A] dark:text-[#F0F0EA]">Belum Ada Anggota Siswa</h4>
+                    <p className="text-xs text-[#8E8E85]">Bagikan kode pendaftaran kelas kepada siswa.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                    {courseStudents.map(stu => (
+                      <div
+                        key={stu.userId}
+                        className="bg-white dark:bg-[#1E1E1C] rounded-2xl p-4 border border-[#E0E0D8] dark:border-[#383832] shadow-xs flex items-center gap-3"
+                      >
+                        {stu.profile?.photoUrl ? (
+                          <img
+                            src={stu.profile.photoUrl}
+                            alt={stu.profile.name?.fullName || 'Student'}
+                            className="w-10 h-10 rounded-full object-cover border"
+                            referrerPolicy="no-referrer"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-full bg-[#2E6F40]/20 text-[#2E6F40] dark:text-emerald-300 flex items-center justify-center font-bold">
+                            <User className="w-5 h-5" />
+                          </div>
+                        )}
+                        <div className="overflow-hidden">
+                          <h5 className="font-bold text-xs text-[#2D2D2A] dark:text-[#F0F0EA] line-clamp-1">
+                            {stu.profile?.name?.fullName || `User ID: ${stu.userId}`}
+                          </h5>
+                          <p className="text-[10px] text-[#8E8E85] line-clamp-1">
+                            {stu.profile?.emailAddress || 'Anggota Siswa'}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODALS                                                                    */}
+      {/* ========================================================================= */}
+
+      {/* 1. Modal Create Calendar Event */}
+      {isCreateEventModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white dark:bg-[#1E1E1C] rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-[#E0E0D8] dark:border-[#383832] space-y-5">
+            <div className="flex items-center justify-between border-b border-[#E0E0D8] dark:border-[#383832] pb-4">
+              <div className="flex items-center gap-2.5">
+                <Calendar className="w-5 h-5 text-[#5A5A40] dark:text-[#A4A485]" />
+                <h3 className="font-serif text-lg font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">
+                  Buat Agenda Google Calendar
+                </h3>
+              </div>
+              <button
+                onClick={() => setIsCreateEventModalOpen(false)}
+                className="p-1 rounded-lg text-[#8E8E85] hover:bg-[#F5F5F0] dark:hover:bg-[#282825]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateEventSubmit} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-[#2D2D2A] dark:text-[#EAEAE2] mb-1.5">
+                  Judul Agenda <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: Ujian Tengah Semester Ganjil"
+                  value={newEventForm.summary}
+                  onChange={e => setNewEventForm({ ...newEventForm, summary: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-[#2D2D2A] dark:text-[#EAEAE2] focus:outline-none focus:ring-2 focus:ring-[#5A5A40]"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-[#2D2D2A] dark:text-[#EAEAE2] mb-1.5">
+                  Lokasi / Ruang
+                </label>
+                <input
+                  type="text"
+                  placeholder="Contoh: Gedung Aula Utama / Laboratorium Komputer"
+                  value={newEventForm.location}
+                  onChange={e => setNewEventForm({ ...newEventForm, location: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-[#2D2D2A] dark:text-[#EAEAE2] focus:outline-none focus:ring-2 focus:ring-[#5A5A40]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-[#2D2D2A] dark:text-[#EAEAE2] mb-1.5">
+                    Tanggal Mulai <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={newEventForm.startDate}
+                    onChange={e => setNewEventForm({ ...newEventForm, startDate: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-[#2D2D2A] dark:text-[#EAEAE2] focus:outline-none focus:ring-2 focus:ring-[#5A5A40]"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-[#2D2D2A] dark:text-[#EAEAE2] mb-1.5">
+                    Tanggal Selesai
+                  </label>
+                  <input
+                    type="date"
+                    value={newEventForm.endDate}
+                    onChange={e => setNewEventForm({ ...newEventForm, endDate: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-[#2D2D2A] dark:text-[#EAEAE2] focus:outline-none focus:ring-2 focus:ring-[#5A5A40]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-[#2D2D2A] dark:text-[#EAEAE2] mb-1.5">
+                  Deskripsi / Catatan Tambahan
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="Catatan perlengkapan, tata tertib, atau keterangan kegiatan..."
+                  value={newEventForm.description}
+                  onChange={e => setNewEventForm({ ...newEventForm, description: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-[#2D2D2A] dark:text-[#EAEAE2] focus:outline-none focus:ring-2 focus:ring-[#5A5A40]"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#E0E0D8] dark:border-[#383832]">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateEventModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl font-bold bg-[#F5F5F0] dark:bg-[#282825] hover:bg-[#EAEAE5] text-[#2D2D2A] dark:text-[#EAEAE2] transition-colors cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl font-bold bg-[#5A5A40] hover:bg-[#484833] text-white transition-all cursor-pointer shadow-sm active:scale-95"
+                >
+                  Simpan ke Google Calendar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 2. Modal Compose Gmail */}
+      {isComposeModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white dark:bg-[#1E1E1C] rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-[#E0E0D8] dark:border-[#383832] space-y-5">
+            <div className="flex items-center justify-between border-b border-[#E0E0D8] dark:border-[#383832] pb-4">
+              <div className="flex items-center gap-2.5">
+                <Mail className="w-5 h-5 text-[#8C4A32] dark:text-[#E07A5F]" />
+                <h3 className="font-serif text-lg font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">
+                  Tulis Pesan Surat Gmail
+                </h3>
+              </div>
+              <button
+                onClick={() => setIsComposeModalOpen(false)}
+                className="p-1 rounded-lg text-[#8E8E85] hover:bg-[#F5F5F0] dark:hover:bg-[#282825]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={promptSendEmail} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-[#2D2D2A] dark:text-[#EAEAE2] mb-1.5">
+                  Email Penerima <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="email"
+                  required
+                  placeholder="tujuan@domain.com"
+                  value={composeForm.to}
+                  onChange={e => setComposeForm({ ...composeForm, to: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-[#2D2D2A] dark:text-[#EAEAE2] focus:outline-none focus:ring-2 focus:ring-[#8C4A32]"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-[#2D2D2A] dark:text-[#EAEAE2] mb-1.5">
+                  Subjek Surat <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Subjek email..."
+                  value={composeForm.subject}
+                  onChange={e => setComposeForm({ ...composeForm, subject: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-[#2D2D2A] dark:text-[#EAEAE2] focus:outline-none focus:ring-2 focus:ring-[#8C4A32]"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-[#2D2D2A] dark:text-[#EAEAE2] mb-1.5">
+                  Isi Surat Email <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  rows={5}
+                  required
+                  placeholder="Tulis pesan lengkap di sini..."
+                  value={composeForm.body}
+                  onChange={e => setComposeForm({ ...composeForm, body: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-[#2D2D2A] dark:text-[#EAEAE2] focus:outline-none focus:ring-2 focus:ring-[#8C4A32]"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#E0E0D8] dark:border-[#383832]">
+                <button
+                  type="button"
+                  onClick={() => setIsComposeModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl font-bold bg-[#F5F5F0] dark:bg-[#282825] hover:bg-[#EAEAE5] text-[#2D2D2A] dark:text-[#EAEAE2] transition-colors cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl font-bold bg-[#8C4A32] hover:bg-[#723B28] text-white transition-all cursor-pointer shadow-sm active:scale-95"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Kirim Pesan</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Modal Create Classroom Announcement */}
+      {isCreateAnnouncementModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white dark:bg-[#1E1E1C] rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-[#E0E0D8] dark:border-[#383832] space-y-5">
+            <div className="flex items-center justify-between border-b border-[#E0E0D8] dark:border-[#383832] pb-4">
+              <div className="flex items-center gap-2.5">
+                <MessageSquare className="w-5 h-5 text-[#2E6F40] dark:text-emerald-400" />
+                <h3 className="font-serif text-lg font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">
+                  Posting Pengumuman Classroom
+                </h3>
+              </div>
+              <button
+                onClick={() => setIsCreateAnnouncementModalOpen(false)}
+                className="p-1 rounded-lg text-[#8E8E85] hover:bg-[#F5F5F0] dark:hover:bg-[#282825]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handlePostAnnouncement} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-[#2D2D2A] dark:text-[#EAEAE2] mb-1.5">
+                  Isi Pengumuman Kelas <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  rows={5}
+                  required
+                  placeholder="Tulis pengumuman untuk seluruh siswa di kelas Google Classroom ini..."
+                  value={announcementText}
+                  onChange={e => setAnnouncementText(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-[#2D2D2A] dark:text-[#EAEAE2] focus:outline-none focus:ring-2 focus:ring-[#2E6F40]"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#E0E0D8] dark:border-[#383832]">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateAnnouncementModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl font-bold bg-[#F5F5F0] dark:bg-[#282825] hover:bg-[#EAEAE5] text-[#2D2D2A] dark:text-[#EAEAE2] transition-colors cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl font-bold bg-[#2E6F40] hover:bg-[#255833] text-white transition-all cursor-pointer shadow-sm active:scale-95"
+                >
+                  Posting ke Classroom
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 4. Modal Create Classroom Coursework */}
+      {isCreateWorkModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white dark:bg-[#1E1E1C] rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-[#E0E0D8] dark:border-[#383832] space-y-5">
+            <div className="flex items-center justify-between border-b border-[#E0E0D8] dark:border-[#383832] pb-4">
+              <div className="flex items-center gap-2.5">
+                <FileText className="w-5 h-5 text-[#2E6F40] dark:text-emerald-400" />
+                <h3 className="font-serif text-lg font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">
+                  Buat Tugas Google Classroom
+                </h3>
+              </div>
+              <button
+                onClick={() => setIsCreateWorkModalOpen(false)}
+                className="p-1 rounded-lg text-[#8E8E85] hover:bg-[#F5F5F0] dark:hover:bg-[#282825]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateCourseWork} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-[#2D2D2A] dark:text-[#EAEAE2] mb-1.5">
+                  Judul Tugas <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: Tugas Mandiri Bab 3 - Analisis Teks Sejarah"
+                  value={newWorkForm.title}
+                  onChange={e => setNewWorkForm({ ...newWorkForm, title: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-[#2D2D2A] dark:text-[#EAEAE2] focus:outline-none focus:ring-2 focus:ring-[#2E6F40]"
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-1">
+                  <label className="block font-bold text-[#2D2D2A] dark:text-[#EAEAE2] mb-1.5">
+                    Poin Maksimal
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={newWorkForm.maxPoints}
+                    onChange={e => setNewWorkForm({ ...newWorkForm, maxPoints: Number(e.target.value) })}
+                    className="w-full px-3 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-[#2D2D2A] dark:text-[#EAEAE2] focus:outline-none focus:ring-2 focus:ring-[#2E6F40]"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="block font-bold text-[#2D2D2A] dark:text-[#EAEAE2] mb-1.5">
+                    Tenggat Waktu Pengumpulan
+                  </label>
+                  <input
+                    type="date"
+                    value={newWorkForm.dueDate}
+                    onChange={e => setNewWorkForm({ ...newWorkForm, dueDate: e.target.value })}
+                    className="w-full px-3 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-[#2D2D2A] dark:text-[#EAEAE2] focus:outline-none focus:ring-2 focus:ring-[#2E6F40]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-[#2D2D2A] dark:text-[#EAEAE2] mb-1.5">
+                  Petunjuk & Instruksi Pengerjaan
+                </label>
+                <textarea
+                  rows={4}
+                  placeholder="Jelaskan instruksi pengerjaan, format berkas yang diterima, dan kriteria penilaian..."
+                  value={newWorkForm.description}
+                  onChange={e => setNewWorkForm({ ...newWorkForm, description: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-[#2D2D2A] dark:text-[#EAEAE2] focus:outline-none focus:ring-2 focus:ring-[#2E6F40]"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#E0E0D8] dark:border-[#383832]">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateWorkModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl font-bold bg-[#F5F5F0] dark:bg-[#282825] hover:bg-[#EAEAE5] text-[#2D2D2A] dark:text-[#EAEAE2] transition-colors cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl font-bold bg-[#2E6F40] hover:bg-[#255833] text-white transition-all cursor-pointer shadow-sm active:scale-95"
+                >
+                  Simpan & Terbitkan Tugas
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 5. Destructive Action Confirmation Modal (Crucial Workspace Mandate) */}
+      <WorkspaceConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        description={confirmModal.description}
+        actionType={confirmModal.actionType}
+        affectedCount={confirmModal.affectedCount}
+        affectedItems={confirmModal.affectedItems}
+        confirmLabel={confirmModal.confirmLabel}
+        isLoading={isExecutingConfirm}
+        onConfirm={handleExecuteModalConfirm}
+        onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+      />
+    </div>
+  );
+};

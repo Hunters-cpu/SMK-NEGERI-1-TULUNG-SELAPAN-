@@ -1,0 +1,293 @@
+import React, { useState, useRef } from 'react';
+import { Upload, Image as ImageIcon, Video as VideoIcon, X, Check, Film, RefreshCw, Link2, Eye } from 'lucide-react';
+
+interface MediaUploadFieldProps {
+  id?: string;
+  label?: string;
+  mediaType: 'image' | 'video' | 'both';
+  value: string;
+  onChange: (url: string) => void;
+  required?: boolean;
+  helperText?: string;
+  placeholder?: string;
+}
+
+export const MediaUploadField: React.FC<MediaUploadFieldProps> = ({
+  id,
+  label = 'Upload Media (Foto / Video)',
+  mediaType = 'image',
+  value,
+  onChange,
+  required = false,
+  helperText,
+  placeholder
+}) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploading, setIsUploading] = useState<boolean>(false);
+  const [dragActive, setDragActive] = useState<boolean>(false);
+  const [showUrlInput, setShowUrlInput] = useState<boolean>(false);
+  const [fileName, setFileName] = useState<string>('');
+  const [uploadError, setUploadError] = useState<string>('');
+
+  const isVideo = mediaType === 'video' || (value && (value.endsWith('.mp4') || value.endsWith('.webm') || value.startsWith('data:video')));
+  const acceptTypes = mediaType === 'video' 
+    ? 'video/mp4,video/webm,video/quicktime' 
+    : mediaType === 'image' 
+      ? 'image/jpeg,image/png,image/webp,image/gif' 
+      : 'image/*,video/mp4,video/webm';
+
+  const handleProcessFile = async (file: File) => {
+    if (!file) return;
+    setUploadError('');
+    setIsUploading(true);
+    setFileName(file.name);
+
+    try {
+      // 1. Read as Data URL
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const base64Data = e.target?.result as string;
+        
+        // Try uploading to server endpoint
+        try {
+          const res = await fetch('/api/upload', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              filename: file.name,
+              base64Data: base64Data,
+              mimeType: file.type
+            })
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            if (data?.url) {
+              onChange(data.url);
+              setIsUploading(false);
+              return;
+            }
+          }
+        } catch (serverErr) {
+          console.warn('Server upload failed, using Data URL fallback:', serverErr);
+        }
+
+        // Fallback: use base64 data directly
+        onChange(base64Data);
+        setIsUploading(false);
+      };
+
+      reader.onerror = () => {
+        setUploadError('Gagal membaca file dari perangkat.');
+        setIsUploading(false);
+      };
+
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error('File upload error:', err);
+      setUploadError('Terjadi kesalahan saat memproses berkas.');
+      setIsUploading(false);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleProcessFile(file);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleProcessFile(e.dataTransfer.files[0]);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+  };
+
+  const handleRemove = () => {
+    onChange('');
+    setFileName('');
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <label className="block text-xs font-bold text-[#2D2D2A]">
+          {label} {required && <span className="text-red-500">*</span>}
+        </label>
+        <button
+          type="button"
+          onClick={() => setShowUrlInput(!showUrlInput)}
+          className="text-[11px] font-semibold text-[#5A5A40] hover:text-[#2D2D2A] flex items-center gap-1 cursor-pointer transition-colors"
+        >
+          <Link2 className="w-3 h-3" />
+          <span>{showUrlInput ? 'Mode Upload File' : 'Gunakan Link URL'}</span>
+        </button>
+      </div>
+
+      {showUrlInput ? (
+        <div className="space-y-2">
+          <input
+            id={id}
+            type="text"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder={placeholder || (mediaType === 'video' ? 'https://.../video.mp4' : 'https://images.unsplash.com/...')}
+            required={required}
+            className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-sm focus:outline-none focus:border-[#5A5A40] transition-colors"
+          />
+          <p className="text-[11px] text-[#8E8E85]">
+            Masukkan tautan link langsung ke file media online (HTTPS).
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {/* Hidden File Input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept={acceptTypes}
+            onChange={handleFileChange}
+            className="hidden"
+          />
+
+          {value ? (
+            /* Preview Container */
+            <div className="relative border-2 border-[#5A5A40]/30 bg-[#F5F5F0] rounded-2xl p-3 flex flex-col sm:flex-row items-center gap-4 transition-all">
+              <div className="w-full sm:w-32 h-24 rounded-xl overflow-hidden bg-[#2D2D2A] flex items-center justify-center flex-shrink-0 relative shadow-inner">
+                {isVideo ? (
+                  <video
+                    src={value}
+                    controls={false}
+                    muted
+                    autoPlay
+                    loop
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <img
+                    src={value}
+                    alt="Preview"
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?auto=format&fit=crop&w=400&q=80';
+                    }}
+                  />
+                )}
+                <div className="absolute top-1 left-1 bg-black/70 backdrop-blur-xs text-white text-[10px] font-bold px-1.5 py-0.5 rounded">
+                  {isVideo ? 'VIDEO' : 'FOTO'}
+                </div>
+              </div>
+
+              <div className="flex-1 min-w-0 space-y-1 w-full text-left">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-800">
+                  <Check className="w-4 h-4 text-emerald-600" />
+                  <span>Media Berhasil Diunggah</span>
+                </div>
+                <p className="text-xs text-[#2D2D2A] font-medium truncate">
+                  {fileName || (value.startsWith('data:') ? 'File media perangkat lokal' : value)}
+                </p>
+                <p className="text-[11px] text-[#8E8E85]">
+                  Siap disimpan secara permanen ke galeri sekolah.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 flex-shrink-0 w-full sm:w-auto justify-end">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-3 py-2 bg-white hover:bg-[#EBEBE5] text-[#2D2D2A] border border-[#E0E0D8] rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Ganti File</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRemove}
+                  className="p-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-xl text-xs font-bold cursor-pointer transition-colors"
+                  title="Hapus media ini"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* Upload Dropzone Box */
+            <div
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onClick={() => fileInputRef.current?.click()}
+              className={`border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-all ${
+                dragActive
+                  ? 'border-[#5A5A40] bg-[#5A5A40]/10 scale-[1.01]'
+                  : 'border-[#D0D0C8] hover:border-[#5A5A40] bg-[#FBFBFA] hover:bg-[#F5F5F0]'
+              }`}
+            >
+              {isUploading ? (
+                <div className="py-3 flex flex-col items-center justify-center space-y-2">
+                  <RefreshCw className="w-8 h-8 text-[#5A5A40] animate-spin" />
+                  <p className="text-xs font-bold text-[#2D2D2A]">Sedang mengunggah berkas...</p>
+                  <p className="text-[11px] text-[#8E8E85]">Harap tunggu sebentar</p>
+                </div>
+              ) : (
+                <div className="py-2 flex flex-col items-center justify-center space-y-2.5">
+                  <div className="w-12 h-12 rounded-2xl bg-[#5A5A40]/10 text-[#5A5A40] flex items-center justify-center">
+                    {mediaType === 'video' ? (
+                      <VideoIcon className="w-6 h-6" />
+                    ) : (
+                      <Upload className="w-6 h-6" />
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-[#2D2D2A]">
+                      Klik untuk Upload atau Tarik File ke Sini
+                    </p>
+                    <p className="text-[11px] text-[#8E8E85] mt-0.5">
+                      {mediaType === 'video'
+                        ? 'Mendukung format Video MP4, WebM (dari Galeri HP/Laptop)'
+                        : mediaType === 'image'
+                        ? 'Mendukung format Gambar JPG, PNG, WEBP (dari Galeri / Kamera)'
+                        : 'Mendukung format Foto (JPG, PNG) & Video (MP4, WebM)'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="px-4 py-1.5 bg-[#5A5A40] hover:bg-[#484833] text-white text-xs font-bold rounded-xl shadow-xs pointer-events-none"
+                  >
+                    PILIH DARI GALERI / FILE
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {uploadError && (
+            <p className="text-xs text-red-600 font-semibold">{uploadError}</p>
+          )}
+
+          {helperText && (
+            <p className="text-[11px] text-[#8E8E85]">{helperText}</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};

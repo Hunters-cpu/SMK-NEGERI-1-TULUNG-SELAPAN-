@@ -1,0 +1,1804 @@
+import React, { useState } from 'react';
+import { useApp } from '../context/AppContext';
+import { MediaSlider } from '../components/MediaSlider';
+import { MediaUploadField } from '../components/MediaUploadField';
+import { ScrollEmboss } from '../components/ScrollEmboss';
+import { TikTokIcon } from '../components/TikTokIcon';
+import { BerandaCalendarWidget } from '../components/BerandaCalendarWidget';
+import { HtmlExportModal } from '../components/HtmlExportModal';
+import { QRCodeModal, QRCodeData } from '../components/QRCodeModal';
+import { SchoolFacility, Activity, Announcement } from '../types';
+import { 
+  Building2, 
+  Compass, 
+  Target, 
+  History, 
+  Sparkles, 
+  MapPin, 
+  Phone, 
+  Mail, 
+  Globe, 
+  Edit3, 
+  Layers, 
+  ChevronRight,
+  BookOpen,
+  FlaskConical,
+  Landmark,
+  Trophy,
+  Laptop,
+  HeartHandshake,
+  ArrowRight,
+  Save,
+  Plus,
+  Trash2,
+  Trees,
+  Shield,
+  MessageCircle,
+  ExternalLink,
+  X,
+  Calendar,
+  Heart,
+  Share2,
+  Eye,
+  EyeOff,
+  Lock,
+  Unlock,
+  Users,
+  Award,
+  Clock,
+  Send,
+  User,
+  CheckCircle,
+  Tag,
+  GraduationCap,
+  FileCode,
+  QrCode,
+  Download
+} from 'lucide-react';
+
+export const HomeView: React.FC = () => {
+  const { 
+    schoolInfo, 
+    authSession, 
+    updateSchoolInfo, 
+    addFacility, 
+    updateFacility, 
+    deleteFacility, 
+    requestDeleteConfirm,
+    setCurrentView,
+    openClass,
+    openEskul,
+    openTeachersView,
+    classes,
+    students,
+    teachers,
+    eskulList,
+    calendarEvents,
+    facilities,
+    announcements,
+    addAnnouncement,
+    updateAnnouncement,
+    deleteAnnouncement,
+    toggleAnnouncementPrivacy,
+    toggleAnnouncementLike,
+    addAnnouncementComment,
+    incrementAnnouncementShare,
+    activities,
+    addActivity,
+    addActivitiesBatch,
+    updateActivity,
+    deleteActivity,
+    toggleActivityPrivacy,
+    toggleActivityLike,
+    addActivityComment,
+    incrementActivityShare,
+    activityCategories,
+    addActivityCategory,
+    showToast
+  } = useApp();
+
+  // Unified Frame Tab State: 'announcements' | 'activities'
+  const [unifiedTab, setUnifiedTab] = useState<'announcements' | 'activities'>('announcements');
+  const [selectedActivityCategory, setSelectedActivityCategory] = useState<string>('Semua');
+
+  // HTML Export and QR Code Modals
+  const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
+  const [qrModalData, setQrModalData] = useState<QRCodeData | null>(null);
+
+  // Comment Modal / Expanded View State
+  const [activeCommentItem, setActiveCommentItem] = useState<{
+    type: 'announcement' | 'activity';
+    id: string;
+    title: string;
+    comments: any[];
+  } | null>(null);
+  const [commentInput, setCommentInput] = useState<string>('');
+
+  // School Info Modal State
+  const [isEditingInfo, setIsEditingInfo] = useState<boolean>(false);
+  const [formData, setFormData] = useState({
+    name: schoolInfo.name,
+    tagline: schoolInfo.tagline,
+    akreditasi: schoolInfo.akreditasi,
+    npsn: schoolInfo.npsn,
+    academicYear: schoolInfo.academicYear || '2026/2027',
+    creatorName: schoolInfo.creatorName || 'Waa-O51W',
+    creatorWhatsapp: schoolInfo.creatorWhatsapp || '+62-831-4883-4663',
+    address: schoolInfo.address,
+    postalCode: schoolInfo.postalCode,
+    city: schoolInfo.city,
+    province: schoolInfo.province,
+    phone: schoolInfo.phone,
+    email: schoolInfo.email,
+    website: schoolInfo.website,
+    tiktokUrl: schoolInfo.tiktokUrl || '',
+    visi: schoolInfo.visi,
+    misiText: schoolInfo.misi.join('\n'),
+    sejarah: schoolInfo.sejarah
+  });
+
+  // Announcement Modal State
+  const [isAnnouncementModalOpen, setIsAnnouncementModalOpen] = useState<boolean>(false);
+  const [editingAnnouncement, setEditingAnnouncement] = useState<Announcement | null>(null);
+  const [announcementForm, setAnnouncementForm] = useState({
+    title: '',
+    category: 'Akademik',
+    content: '',
+    author: 'Kepala Sekolah',
+    date: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
+    isPinned: false
+  });
+
+  // Activity Modal State (Supports Batch Upload for Admin Utama & Admin Kelas)
+  const [isActivityModalOpen, setIsActivityModalOpen] = useState<boolean>(false);
+  const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
+  const [activityForm, setActivityForm] = useState({
+    title: '',
+    category: activityCategories[0] || 'Kegiatan Sekolah',
+    description: '',
+    date: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
+    mediaUrl: '',
+    mediaType: 'image' as 'image' | 'video',
+    authorName: authSession.name || 'Admin Sekolah',
+    authorRole: authSession.role === 'super_admin' ? 'Admin Utama' : 'Admin Kelas',
+    batchUrls: [] as string[]
+  });
+
+  // Facility Add/Edit Modal State
+  const [isFacilityModalOpen, setIsFacilityModalOpen] = useState<boolean>(false);
+  const [editingFacility, setEditingFacility] = useState<SchoolFacility | null>(null);
+  const [facilityForm, setFacilityForm] = useState({
+    nama: '',
+    deskripsi: '',
+    icon: 'FlaskConical',
+    foto: '',
+    lokasi: '',
+    kondisi: 'Sangat Baik'
+  });
+
+  const isAnyAdmin =
+    authSession.role === 'super_admin' ||
+    authSession.role === 'custom_admin' ||
+    authSession.role === 'class_admin' ||
+    authSession.role === 'eskul_admin';
+
+  // Filter items based on privacy
+  const filteredAnnouncements = announcements.filter(a => isAnyAdmin || !a.isPrivate);
+  const filteredActivities = activities
+    .filter(a => isAnyAdmin || !a.isPrivate)
+    .filter(a => selectedActivityCategory === 'Semua' || a.category === selectedActivityCategory);
+
+  // Facilities Handlers
+  const handleOpenAddFacility = () => {
+    setEditingFacility(null);
+    setFacilityForm({
+      nama: '',
+      deskripsi: '',
+      icon: 'Building2',
+      foto: '',
+      lokasi: '',
+      kondisi: 'Sangat Baik'
+    });
+    setIsFacilityModalOpen(true);
+  };
+
+  const handleOpenEditFacility = (facility: SchoolFacility) => {
+    setEditingFacility(facility);
+    setFacilityForm({
+      nama: facility.nama,
+      deskripsi: facility.deskripsi,
+      icon: facility.icon || 'FlaskConical',
+      foto: facility.foto || '',
+      lokasi: facility.lokasi || '',
+      kondisi: facility.kondisi || 'Sangat Baik'
+    });
+    setIsFacilityModalOpen(true);
+  };
+
+  const handleSaveFacility = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!facilityForm.nama.trim()) return;
+
+    if (editingFacility) {
+      updateFacility(editingFacility.id, {
+        nama: facilityForm.nama.trim(),
+        deskripsi: facilityForm.deskripsi.trim(),
+        icon: facilityForm.icon,
+        foto: facilityForm.foto.trim() || undefined,
+        lokasi: facilityForm.lokasi.trim() || undefined,
+        kondisi: facilityForm.kondisi.trim() || undefined
+      });
+    } else {
+      addFacility({
+        nama: facilityForm.nama.trim(),
+        deskripsi: facilityForm.deskripsi.trim(),
+        icon: facilityForm.icon,
+        foto: facilityForm.foto.trim() || undefined,
+        lokasi: facilityForm.lokasi.trim() || undefined,
+        kondisi: facilityForm.kondisi.trim() || undefined
+      });
+    }
+    setIsFacilityModalOpen(false);
+  };
+
+  const handleDeleteFacility = (facility: SchoolFacility) => {
+    requestDeleteConfirm({
+      itemName: `Fasilitas "${facility.nama}"`,
+      message: `Yakin ingin menghapus fasilitas "${facility.nama}"? Tindakan ini tidak dapat dibatalkan.`,
+      onConfirm: () => deleteFacility(facility.id)
+    });
+  };
+
+  const handleSaveInfo = (e: React.FormEvent) => {
+    e.preventDefault();
+    updateSchoolInfo({
+      name: formData.name.trim(),
+      tagline: formData.tagline.trim(),
+      akreditasi: formData.akreditasi.trim(),
+      npsn: formData.npsn.trim(),
+      academicYear: formData.academicYear.trim(),
+      creatorName: authSession.role === 'super_admin' ? formData.creatorName.trim() : (schoolInfo.creatorName || 'Waa-O51W'),
+      creatorWhatsapp: formData.creatorWhatsapp.trim(),
+      address: formData.address.trim(),
+      postalCode: formData.postalCode.trim(),
+      city: formData.city.trim(),
+      province: formData.province.trim(),
+      phone: formData.phone.trim(),
+      email: formData.email.trim(),
+      website: formData.website.trim(),
+      tiktokUrl: formData.tiktokUrl.trim() || undefined,
+      visi: formData.visi.trim(),
+      misi: formData.misiText.split('\n').map(s => s.trim()).filter(Boolean),
+      sejarah: formData.sejarah.trim()
+    });
+    setIsEditingInfo(false);
+  };
+
+  // Announcement Handlers
+  const handleOpenAddAnnouncement = () => {
+    setEditingAnnouncement(null);
+    setAnnouncementForm({
+      title: '',
+      category: 'Pengumuman Penting',
+      content: '',
+      author: authSession.name || 'Admin Sekolah',
+      date: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
+      isPinned: false
+    });
+    setIsAnnouncementModalOpen(true);
+  };
+
+  const handleOpenEditAnnouncement = (ann: Announcement) => {
+    setEditingAnnouncement(ann);
+    setAnnouncementForm({
+      title: ann.title,
+      category: ann.category,
+      content: ann.content,
+      author: ann.author,
+      date: ann.date,
+      isPinned: !!ann.isPinned
+    });
+    setIsAnnouncementModalOpen(true);
+  };
+
+  const handleSaveAnnouncement = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!announcementForm.title.trim() || !announcementForm.content.trim()) return;
+
+    if (editingAnnouncement) {
+      updateAnnouncement(editingAnnouncement.id, {
+        title: announcementForm.title.trim(),
+        category: announcementForm.category.trim(),
+        content: announcementForm.content.trim(),
+        author: announcementForm.author.trim(),
+        date: announcementForm.date,
+        isPinned: announcementForm.isPinned
+      });
+    } else {
+      addAnnouncement({
+        title: announcementForm.title.trim(),
+        category: announcementForm.category.trim(),
+        content: announcementForm.content.trim(),
+        author: announcementForm.author.trim(),
+        date: announcementForm.date,
+        isPinned: announcementForm.isPinned,
+        likes: 0,
+        comments: []
+      });
+    }
+    setIsAnnouncementModalOpen(false);
+  };
+
+  // Activity Handlers (Multi-media upload supported)
+  const handleOpenAddActivity = () => {
+    setEditingActivity(null);
+    setActivityForm({
+      title: '',
+      category: activityCategories[0] || 'Kegiatan Sekolah',
+      description: '',
+      date: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
+      mediaUrl: '',
+      mediaType: 'image',
+      authorName: authSession.name || 'Admin Sekolah',
+      authorRole: authSession.role === 'super_admin' ? 'Admin Utama' : 'Admin Kelas',
+      batchUrls: []
+    });
+    setIsActivityModalOpen(true);
+  };
+
+  const handleOpenEditActivity = (act: Activity) => {
+    setEditingActivity(act);
+    setActivityForm({
+      title: act.title,
+      category: act.category,
+      description: act.description,
+      date: act.date,
+      mediaUrl: act.mediaUrl || '',
+      mediaType: act.mediaType || 'image',
+      authorName: act.authorName || 'Admin Sekolah',
+      authorRole: act.authorRole || 'Admin Sekolah',
+      batchUrls: []
+    });
+    setIsActivityModalOpen(true);
+  };
+
+  const handleSaveActivity = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activityForm.title.trim()) return;
+
+    if (editingActivity) {
+      updateActivity(editingActivity.id, {
+        title: activityForm.title.trim(),
+        category: activityForm.category,
+        description: activityForm.description.trim(),
+        date: activityForm.date,
+        mediaUrl: activityForm.mediaUrl.trim() || undefined,
+        mediaType: activityForm.mediaType
+      });
+    } else {
+      // If multiple media urls entered in batchUrls, create multiple activity items or one main item
+      if (activityForm.batchUrls && activityForm.batchUrls.length > 1) {
+        const batch = activityForm.batchUrls.map((url, idx) => ({
+          title: `${activityForm.title.trim()} (Dokumentasi ${idx + 1})`,
+          category: activityForm.category,
+          description: activityForm.description.trim(),
+          date: activityForm.date,
+          mediaUrl: url,
+          mediaType: activityForm.mediaType,
+          authorName: activityForm.authorName,
+          authorRole: activityForm.authorRole,
+          likes: 0,
+          comments: []
+        }));
+        addActivitiesBatch(batch);
+      } else {
+        addActivity({
+          title: activityForm.title.trim(),
+          category: activityForm.category,
+          description: activityForm.description.trim(),
+          date: activityForm.date,
+          mediaUrl: activityForm.mediaUrl.trim() || undefined,
+          mediaType: activityForm.mediaType,
+          authorName: activityForm.authorName,
+          authorRole: activityForm.authorRole,
+          likes: 0,
+          comments: []
+        });
+      }
+    }
+    setIsActivityModalOpen(false);
+  };
+
+  // Comment Submission
+  const handleOpenComments = (type: 'announcement' | 'activity', item: any) => {
+    setActiveCommentItem({
+      type,
+      id: item.id,
+      title: item.title,
+      comments: item.comments || []
+    });
+  };
+
+  const handleSubmitComment = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!commentInput.trim() || !activeCommentItem) return;
+
+    const author = authSession.name || (authSession.role === 'super_admin' ? 'Admin Utama' : 'Warga Sekolah');
+
+    if (activeCommentItem.type === 'announcement') {
+      addAnnouncementComment(activeCommentItem.id, commentInput.trim(), author);
+    } else {
+      addActivityComment(activeCommentItem.id, commentInput.trim(), author);
+    }
+
+    // Update active modal view comments
+    const newComment = {
+      id: `c-${Date.now()}`,
+      authorName: author,
+      authorRole: authSession.role === 'super_admin' ? 'Admin Utama' : 'Siswa',
+      content: commentInput.trim(),
+      createdAt: new Date().toISOString()
+    };
+    setActiveCommentItem(prev => prev ? { ...prev, comments: [...prev.comments, newComment] } : null);
+    setCommentInput('');
+  };
+
+  const getFacilityIcon = (iconName: string) => {
+    switch (iconName) {
+      case 'FlaskConical': return <FlaskConical className="w-5 h-5" />;
+      case 'BookOpen': return <BookOpen className="w-5 h-5" />;
+      case 'Landmark': return <Landmark className="w-5 h-5" />;
+      case 'Trophy': return <Trophy className="w-5 h-5" />;
+      case 'Laptop': return <Laptop className="w-5 h-5" />;
+      case 'Building2': return <Building2 className="w-5 h-5" />;
+      case 'Trees': return <Trees className="w-5 h-5" />;
+      case 'Shield': return <Shield className="w-5 h-5" />;
+      default: return <HeartHandshake className="w-5 h-5" />;
+    }
+  };
+
+  const rawWaNumber = schoolInfo.creatorWhatsapp || '+62-831-4883-4663';
+  const cleanWaNumber = rawWaNumber.replace(/[^0-9]/g, '');
+  const waUrl = `https://wa.me/${cleanWaNumber}?text=${encodeURIComponent(
+    `Halo Admin Utama (${schoolInfo.creatorName || 'Waa-O51W'}), saya ingin mengajukan penambahan fitur atau perbaikan pada website sekolah ${schoolInfo.name}.`
+  )}`;
+
+  return (
+    <div className="space-y-8 sm:space-y-12 pb-24 text-[#2D2D2A] dark:text-[#EAEAE2]">
+      {/* 🔹 CREATOR NAME BADGE & STATUS */}
+      <div className="flex items-center justify-between px-4 py-2.5 bg-white dark:bg-[#242422] border border-[#E0E0D8] dark:border-[#383832] rounded-2xl text-xs text-[#8E8E85] dark:text-[#A4A49B] shadow-xs">
+        <div className="flex items-center gap-2">
+          <span className="w-2.5 h-2.5 rounded-full bg-[#5A5A40] dark:bg-[#727252] animate-pulse" />
+          <span className="text-[11px] sm:text-xs">
+            Dibuat & Dikelola oleh: <strong className="text-[#5A5A40] dark:text-[#C5C5B0] font-bold">{schoolInfo.creatorName || 'Waa-O51W'} (Admin Utama)</strong>
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="hidden md:inline-flex items-center gap-1 text-[11px] font-bold text-[#5A5A40] dark:text-[#C5C5B0] bg-[#F5F5F0] dark:bg-[#1E1E1C] px-2.5 py-0.5 rounded-lg border border-[#E0E0D8] dark:border-[#383832]">
+            <Calendar className="w-3 h-3 text-[#5A5A40] dark:text-[#C5C5B0]" />
+            <span>TA {schoolInfo.academicYear || '2026/2027'}</span>
+          </span>
+          <span className="hidden sm:inline-flex items-center gap-1.5 text-[10px] uppercase font-bold tracking-widest text-[#8E8E85] dark:text-[#A4A49B] bg-[#F5F5F0] dark:bg-[#1E1E1C] px-2.5 py-1 rounded-lg border border-[#E0E0D8] dark:border-[#383832]">
+            <Sparkles className="w-3 h-3 text-[#5A5A40] dark:text-[#C5C5B0]" />
+            <span>Sistem Buku Kenangan & Portal Sekolah</span>
+          </span>
+        </div>
+      </div>
+
+      {/* 🔹 HERO SLIDER SECTION (FOTO & VIDEO OTOMATIS BERPUTAR DENGAN INTERAKSI) */}
+      <section className="relative">
+        <MediaSlider />
+      </section>
+
+      {/* 🔹 QUICK OVERVIEW & SHORTCUTS */}
+      <ScrollEmboss>
+        <section className="bg-white dark:bg-[#242422] border border-[#E0E0D8] dark:border-[#383832] rounded-[32px] p-6 sm:p-8 shadow-sm relative overflow-hidden">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative z-10">
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#F5F5F0] dark:bg-[#1E1E1C] text-[#5A5A40] dark:text-[#C5C5B0] text-xs font-bold uppercase tracking-widest border border-[#E0E0D8] dark:border-[#383832]">
+                <Sparkles className="w-3.5 h-3.5 text-[#5A5A40] dark:text-[#C5C5B0]" />
+                <span>Pusat Informasi & Kenangan Resmi • TA {schoolInfo.academicYear || '2026/2027'}</span>
+              </div>
+              <h2 className="font-serif text-2xl sm:text-3xl lg:text-4xl font-bold text-[#2D2D2A] dark:text-[#F0F0EA] tracking-tight">
+                Selamat Datang di {schoolInfo.name}
+              </h2>
+              <p className="text-[#8E8E85] dark:text-[#A4A49B] text-sm sm:text-base max-w-2xl leading-relaxed">
+                {schoolInfo.tagline}
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="px-5 py-3 bg-[#F8F8F5] dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#383832] rounded-2xl text-center min-w-[100px]">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-[#8E8E85] dark:text-[#A4A49B] block">NPSN</span>
+                <span className="font-serif text-base font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">{schoolInfo.npsn}</span>
+              </div>
+              <div className="px-5 py-3 bg-[#F5F5F0] dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#383832] rounded-2xl text-center min-w-[100px]">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-[#5A5A40] dark:text-[#C5C5B0] block">Akreditasi</span>
+                <span className="font-serif text-base font-bold text-[#5A5A40] dark:text-[#C5C5B0]">{schoolInfo.akreditasi}</span>
+              </div>
+
+              {/* Quick HTML File Export & QR Buttons */}
+              <button
+                id="btn-export-html-home-top"
+                onClick={() => setIsExportModalOpen(true)}
+                className="px-4 py-3 bg-[#5A5A40] hover:bg-[#484833] text-white rounded-2xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 shadow-sm transition-all cursor-pointer active:scale-95"
+                title="Buka Pop-up Ekspor Website ke File HTML"
+              >
+                <FileCode className="w-4 h-4" />
+                <span>File HTML</span>
+              </button>
+
+              <button
+                id="btn-qr-portal-home-top"
+                onClick={() => setQrModalData({
+                  type: 'school',
+                  id: 'school-main-portal',
+                  title: schoolInfo.name,
+                  subtitle: `${schoolInfo.tagline || 'Portal Buku Kenangan & Profil Resmi Sekolah'} • NPSN ${schoolInfo.npsn}`,
+                  category: 'Portal Sekolah'
+                })}
+                className="px-4 py-3 bg-[#F5F5F0] dark:bg-[#1E1E1C] hover:bg-[#E0E0D8] dark:hover:bg-[#383832] text-[#5A5A40] dark:text-[#C5C5B0] border border-[#E0E0D8] dark:border-[#383832] rounded-2xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 shadow-2xs transition-all cursor-pointer active:scale-95"
+                title="Buka & Unduh Kode QR Portal Sekolah"
+              >
+                <QrCode className="w-4 h-4" />
+                <span className="hidden sm:inline">QR Portal</span>
+              </button>
+
+              {schoolInfo.tiktokUrl && (
+                <a
+                  id="btn-tiktok-sekolah-beranda"
+                  href={schoolInfo.tiktokUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-5 py-3 bg-black hover:bg-neutral-900 text-white rounded-2xl text-xs font-bold uppercase tracking-wider flex items-center gap-2.5 shadow-md hover:shadow-lg transition-all cursor-pointer active:scale-95 group border border-neutral-800"
+                  title="Buka Akun TikTok Resmi Sekolah"
+                >
+                  <TikTokIcon className="w-4 h-4 text-white group-hover:scale-110 transition-transform" />
+                  <span>Akun Sekolah</span>
+                  <ExternalLink className="w-3.5 h-3.5 opacity-70" />
+                </a>
+              )}
+
+              {authSession.role === 'super_admin' && (
+                <button
+                  id="btn-edit-school-info"
+                  onClick={() => {
+                    setFormData({
+                      name: schoolInfo.name,
+                      tagline: schoolInfo.tagline,
+                      akreditasi: schoolInfo.akreditasi,
+                      npsn: schoolInfo.npsn,
+                      academicYear: schoolInfo.academicYear || '2026/2027',
+                      creatorName: schoolInfo.creatorName || 'Waa-O51W',
+                      creatorWhatsapp: schoolInfo.creatorWhatsapp || '+62-831-4883-4663',
+                      address: schoolInfo.address,
+                      postalCode: schoolInfo.postalCode,
+                      city: schoolInfo.city,
+                      province: schoolInfo.province,
+                      phone: schoolInfo.phone,
+                      email: schoolInfo.email,
+                      website: schoolInfo.website,
+                      tiktokUrl: schoolInfo.tiktokUrl || '',
+                      visi: schoolInfo.visi,
+                      misiText: schoolInfo.misi.join('\n'),
+                      sejarah: schoolInfo.sejarah
+                    });
+                    setIsEditingInfo(true);
+                  }}
+                  className="px-4 py-3 bg-[#8C4A32] hover:bg-[#723B28] text-white rounded-2xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 shadow-sm transition-all cursor-pointer active:scale-95"
+                  title="Kelola Profil & Kontak Admin Utama"
+                >
+                  <Edit3 className="w-4 h-4" />
+                  <span>Ubah Profil</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </section>
+      </ScrollEmboss>
+
+      {/* 🔹 QUICK PORTAL NAVIGATION TILES (WITH 10s & 15s TRANSITION INTEGRATION) */}
+      <section className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <button
+          onClick={() => setCurrentView('classes')}
+          className="p-4 sm:p-5 bg-white dark:bg-[#242422] border border-[#E0E0D8] dark:border-[#383832] rounded-2xl hover:border-[#5A5A40] dark:hover:border-[#727252] shadow-xs hover:shadow-md transition-all text-left group cursor-pointer"
+        >
+          <div className="w-10 h-10 rounded-xl bg-[#F5F5F0] dark:bg-[#1E1E1C] flex items-center justify-center text-[#5A5A40] dark:text-[#C5C5B0] group-hover:bg-[#5A5A40] group-hover:text-white transition-all mb-3">
+            <BookOpen className="w-5 h-5" />
+          </div>
+          <h4 className="font-serif text-sm sm:text-base font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">
+            Ruang Kelas
+          </h4>
+          <p className="text-[11px] text-[#8E8E85] dark:text-[#A4A49B] mt-0.5">
+            {classes.length} Kelas Aktif • Animasi 10s
+          </p>
+        </button>
+
+        <button
+          onClick={() => setCurrentView('eskul')}
+          className="p-4 sm:p-5 bg-white dark:bg-[#242422] border border-[#E0E0D8] dark:border-[#383832] rounded-2xl hover:border-[#5A5A40] dark:hover:border-[#727252] shadow-xs hover:shadow-md transition-all text-left group cursor-pointer"
+        >
+          <div className="w-10 h-10 rounded-xl bg-[#F5F5F0] dark:bg-[#1E1E1C] flex items-center justify-center text-[#5A5A40] dark:text-[#C5C5B0] group-hover:bg-[#5A5A40] group-hover:text-white transition-all mb-3">
+            <Trophy className="w-5 h-5" />
+          </div>
+          <h4 className="font-serif text-sm sm:text-base font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">
+            Ekstrakurikuler
+          </h4>
+          <p className="text-[11px] text-[#8E8E85] dark:text-[#A4A49B] mt-0.5">
+            {eskulList.length} Cabang • Forum & Anggota
+          </p>
+        </button>
+
+        <button
+          onClick={() => openTeachersView(false)}
+          className="p-4 sm:p-5 bg-white dark:bg-[#242422] border border-[#E0E0D8] dark:border-[#383832] rounded-2xl hover:border-[#5A5A40] dark:hover:border-[#727252] shadow-xs hover:shadow-md transition-all text-left group cursor-pointer"
+        >
+          <div className="w-10 h-10 rounded-xl bg-[#F5F5F0] dark:bg-[#1E1E1C] flex items-center justify-center text-[#5A5A40] dark:text-[#C5C5B0] group-hover:bg-[#5A5A40] group-hover:text-white transition-all mb-3">
+            <GraduationCap className="w-5 h-5" />
+          </div>
+          <h4 className="font-serif text-sm sm:text-base font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">
+            Dewan Guru
+          </h4>
+          <p className="text-[11px] text-[#8E8E85] dark:text-[#A4A49B] mt-0.5">
+            Kepsek & 4 Wakasek • Animasi 15s
+          </p>
+        </button>
+
+        <button
+          onClick={() => setCurrentView('osis')}
+          className="p-4 sm:p-5 bg-white dark:bg-[#242422] border border-[#E0E0D8] dark:border-[#383832] rounded-2xl hover:border-[#5A5A40] dark:hover:border-[#727252] shadow-xs hover:shadow-md transition-all text-left group cursor-pointer"
+        >
+          <div className="w-10 h-10 rounded-xl bg-[#F5F5F0] dark:bg-[#1E1E1C] flex items-center justify-center text-[#5A5A40] dark:text-[#C5C5B0] group-hover:bg-[#5A5A40] group-hover:text-white transition-all mb-3">
+            <Award className="w-5 h-5" />
+          </div>
+          <h4 className="font-serif text-sm sm:text-base font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">
+            Jabatan OSIS
+          </h4>
+          <p className="text-[11px] text-[#8E8E85] dark:text-[#A4A49B] mt-0.5">
+            Struktur Pengurus & Sekbid
+          </p>
+        </button>
+      </section>
+
+      {/* 🔹 📅 KALENDER NYATA BERANDA (INTERAKTIF, TANGGAL MERAH, HARI PENTING & JADWAL SEKOLAH - BISA DIBUKA/TUTUP) */}
+      <ScrollEmboss>
+        <BerandaCalendarWidget />
+      </ScrollEmboss>
+
+      {/* 🔹 👑 UNIFIED FRAME: PENGUMUMAN TERBARU & KEGIATAN SEKOLAH TERKINI (DIPINDAHKAN KE ATAS SATU FRAME DENGAN OPSI PILIHAN & KOMENTAR INTERAKTIF) */}
+      <ScrollEmboss>
+        <section className="bg-white dark:bg-[#242422] border border-[#E0E0D8] dark:border-[#383832] rounded-[32px] p-6 sm:p-8 shadow-sm space-y-6">
+          {/* Header with Switch Tabs */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#E0E0D8] dark:border-[#383832] pb-5">
+            <div>
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#F5F5F0] dark:bg-[#1E1E1C] text-[#5A5A40] dark:text-[#C5C5B0] text-xs font-bold uppercase tracking-wider border border-[#E0E0D8] dark:border-[#383832]">
+                <Sparkles className="w-3.5 h-3.5 text-[#5A5A40] dark:text-[#C5C5B0]" />
+                <span>Pusat Publikasi & Kabar Terkini</span>
+              </div>
+              <h3 className="font-serif text-2xl font-bold text-[#2D2D2A] dark:text-[#F0F0EA] mt-1">
+                Kabar & Aktivitas Sekolah
+              </h3>
+            </div>
+
+            {/* Segmented Switch Control */}
+            <div className="flex items-center gap-2 bg-[#F5F5F0] dark:bg-[#1E1E1C] p-1.5 rounded-2xl border border-[#E0E0D8] dark:border-[#383832]">
+              <button
+                id="tab-toggle-announcements"
+                onClick={() => setUnifiedTab('announcements')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-2 ${
+                  unifiedTab === 'announcements'
+                    ? 'bg-[#5A5A40] dark:bg-[#727252] text-white shadow-xs'
+                    : 'text-[#5A5A40] dark:text-[#C5C5B0] hover:text-[#2D2D2A] dark:hover:text-[#F0F0EA]'
+                }`}
+              >
+                <span>📢 Pengumuman Terbaru</span>
+                <span className="px-1.5 py-0.5 text-[10px] rounded-full bg-white/20">
+                  {filteredAnnouncements.length}
+                </span>
+              </button>
+
+              <button
+                id="tab-toggle-activities"
+                onClick={() => setUnifiedTab('activities')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-2 ${
+                  unifiedTab === 'activities'
+                    ? 'bg-[#5A5A40] dark:bg-[#727252] text-white shadow-xs'
+                    : 'text-[#5A5A40] dark:text-[#C5C5B0] hover:text-[#2D2D2A] dark:hover:text-[#F0F0EA]'
+                }`}
+              >
+                <span>📸 Kegiatan Terkini</span>
+                <span className="px-1.5 py-0.5 text-[10px] rounded-full bg-white/20">
+                  {filteredActivities.length}
+                </span>
+              </button>
+            </div>
+          </div>
+
+          {/* TAB 1: PENGUMUMAN TERBARU */}
+          {unifiedTab === 'announcements' && (
+            <div className="space-y-5">
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-[#8E8E85] dark:text-[#A4A49B]">
+                  Menampilkan {filteredAnnouncements.length} pengumuman resmi sekolah.
+                </p>
+                {authSession.role === 'super_admin' && (
+                  <button
+                    id="btn-add-announcement-home"
+                    onClick={handleOpenAddAnnouncement}
+                    className="inline-flex items-center gap-2 px-3.5 py-2 bg-[#5A5A40] dark:bg-[#727252] hover:bg-[#484833] text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow-sm transition-all cursor-pointer active:scale-95"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Buat Pengumuman</span>
+                  </button>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {filteredAnnouncements.map((ann) => (
+                  <div
+                    key={ann.id}
+                    className={`p-5 rounded-2xl border transition-all flex flex-col justify-between space-y-4 ${
+                      ann.isPinned
+                        ? 'bg-amber-50/40 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800/40 shadow-xs'
+                        : 'bg-[#F9F9F6] dark:bg-[#1E1E1C] border-[#E0E0D8] dark:border-[#383832] hover:border-[#5A5A40]'
+                    } ${ann.isPrivate ? 'ring-2 ring-amber-500/40' : ''}`}
+                  >
+                    <div className="space-y-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-[#5A5A40]/10 dark:bg-[#5A5A40]/30 text-[#5A5A40] dark:text-[#C5C5B0]">
+                            {ann.category}
+                          </span>
+                          {ann.isPinned && (
+                            <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-amber-500 text-white">
+                              📌 Sematan
+                            </span>
+                          )}
+                          {ann.isPrivate && (
+                            <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-neutral-800 text-amber-300 flex items-center gap-1">
+                              <Lock className="w-3 h-3" />
+                              <span>Private</span>
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[11px] text-[#8E8E85] dark:text-[#A4A49B] flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          <span>{ann.date}</span>
+                        </span>
+                      </div>
+
+                      <h4 className="font-serif text-base font-bold text-[#2D2D2A] dark:text-[#F0F0EA] line-clamp-2">
+                        {ann.title}
+                      </h4>
+                      <p className="text-xs sm:text-sm text-[#8E8E85] dark:text-[#A4A49B] leading-relaxed line-clamp-3 whitespace-pre-line">
+                        {ann.content}
+                      </p>
+                    </div>
+
+                    <div className="pt-3 border-t border-[#E0E0D8] dark:border-[#383832] flex items-center justify-between gap-2">
+                      <div className="text-[11px] text-[#8E8E85] dark:text-[#A4A49B]">
+                        Oleh: <strong className="text-[#2D2D2A] dark:text-[#F0F0EA]">{ann.author}</strong>
+                      </div>
+
+                      {/* Social & Privacy Controls */}
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => toggleAnnouncementLike(ann.id)}
+                          className="p-1.5 rounded-lg hover:bg-white dark:hover:bg-[#282825] text-[#5A5A40] dark:text-[#C5C5B0] flex items-center gap-1 text-xs transition-colors cursor-pointer"
+                          title="Sukai pengumuman ini"
+                        >
+                          <Heart className={`w-3.5 h-3.5 ${ann.likes ? 'fill-red-500 text-red-500' : ''}`} />
+                          <span>{ann.likes || 0}</span>
+                        </button>
+
+                        <button
+                          onClick={() => handleOpenComments('announcement', ann)}
+                          className="p-1.5 rounded-lg hover:bg-white dark:hover:bg-[#282825] text-[#5A5A40] dark:text-[#C5C5B0] flex items-center gap-1 text-xs transition-colors cursor-pointer"
+                          title="Lihat & Tulis Komentar Siswa"
+                        >
+                          <MessageCircle className="w-3.5 h-3.5" />
+                          <span>{(ann.comments || []).length}</span>
+                        </button>
+
+                        <button
+                          onClick={() => incrementAnnouncementShare(ann.id)}
+                          className="p-1.5 rounded-lg hover:bg-white dark:hover:bg-[#282825] text-[#5A5A40] dark:text-[#C5C5B0] text-xs transition-colors cursor-pointer"
+                          title="Bagikan pengumuman"
+                        >
+                          <Share2 className="w-3.5 h-3.5" />
+                        </button>
+
+                        {/* Admin Controls */}
+                        {authSession.role === 'super_admin' && (
+                          <div className="flex items-center gap-1 pl-2 border-l border-[#E0E0D8] dark:border-[#383832]">
+                            <button
+                              onClick={() => toggleAnnouncementPrivacy(ann.id)}
+                              className={`p-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                                ann.isPrivate
+                                  ? 'bg-amber-100 text-amber-900 hover:bg-amber-200'
+                                  : 'hover:bg-white dark:hover:bg-[#282825] text-[#8E8E85]'
+                              }`}
+                              title={ann.isPrivate ? 'Jadikan Publik' : 'Private Postingan'}
+                            >
+                              {ann.isPrivate ? <Lock className="w-3.5 h-3.5 text-amber-700" /> : <Unlock className="w-3.5 h-3.5" />}
+                            </button>
+                            <button
+                              onClick={() => handleOpenEditAnnouncement(ann)}
+                              className="p-1.5 rounded-lg hover:bg-white dark:hover:bg-[#282825] text-[#5A5A40] dark:text-[#C5C5B0] text-xs cursor-pointer"
+                              title="Ubah"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => requestDeleteConfirm({
+                                itemName: `Pengumuman "${ann.title}"`,
+                                onConfirm: () => deleteAnnouncement(ann.id)
+                              })}
+                              className="p-1.5 rounded-lg hover:bg-red-50 text-red-600 text-xs cursor-pointer"
+                              title="Hapus"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: KEGIATAN SEKOLAH TERKINI */}
+          {unifiedTab === 'activities' && (
+            <div className="space-y-5">
+              {/* Category Filter Pills & Add Button */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
+                  {['Semua', ...(activityCategories || [])].map((cat) => (
+                    <button
+                      key={cat}
+                      onClick={() => setSelectedActivityCategory(cat)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                        selectedActivityCategory === cat
+                          ? 'bg-[#5A5A40] dark:bg-[#727252] text-white shadow-xs font-bold'
+                          : 'bg-[#F5F5F0] dark:bg-[#1E1E1C] text-[#5A5A40] dark:text-[#C5C5B0] hover:bg-[#EAEAE5]'
+                      }`}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+
+                {isAnyAdmin && (
+                  <button
+                    id="btn-add-activity-home"
+                    onClick={handleOpenAddActivity}
+                    className="inline-flex items-center gap-2 px-3.5 py-2 bg-[#5A5A40] dark:bg-[#727252] hover:bg-[#484833] text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow-sm transition-all cursor-pointer shrink-0 active:scale-95"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Upload Foto/Video Kegiatan</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Activities Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                {(filteredActivities || []).map((act) => (
+                  <div
+                    key={act.id}
+                    className={`bg-[#F9F9F6] dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#383832] rounded-[24px] overflow-hidden shadow-xs hover:shadow-md transition-all flex flex-col justify-between group ${
+                      act.isPrivate ? 'ring-2 ring-amber-500/50' : ''
+                    }`}
+                  >
+                    {/* Media Thumbnail */}
+                    {act.mediaUrl ? (
+                      <div className="aspect-[16/10] w-full bg-[#EAEAE5] dark:bg-[#282825] overflow-hidden relative">
+                        {act.mediaType === 'video' ? (
+                          <video
+                            src={act.mediaUrl}
+                            className="w-full h-full object-cover"
+                            controls
+                            playsInline
+                          />
+                        ) : (
+                          <img
+                            src={act.mediaUrl}
+                            alt={act.title}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                            loading="lazy"
+                          />
+                        )}
+                        <span className="absolute top-3 left-3 bg-black/70 backdrop-blur-sm text-white px-2.5 py-1 rounded-lg text-[10px] font-bold">
+                          {act.category}
+                        </span>
+                        {act.isPrivate && (
+                          <span className="absolute top-3 right-3 bg-amber-500 text-white px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 shadow-xs">
+                            <Lock className="w-3 h-3" />
+                            <span>Arsip Private</span>
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="h-32 bg-[#EAEAE5] dark:bg-[#282825] flex items-center justify-center text-[#5A5A40]/40">
+                        <Sparkles className="w-10 h-10" />
+                      </div>
+                    )}
+
+                    <div className="p-4 sm:p-5 space-y-3 flex-1 flex flex-col justify-between">
+                      <div className="space-y-1.5">
+                        <span className="text-[10px] font-bold text-[#8E8E85] dark:text-[#A4A49B] flex items-center gap-1">
+                          <Calendar className="w-3 h-3" />
+                          <span>{act.date}</span>
+                        </span>
+                        <h4 className="font-serif text-base font-bold text-[#2D2D2A] dark:text-[#F0F0EA] line-clamp-1 group-hover:text-[#5A5A40]">
+                          {act.title}
+                        </h4>
+                        <p className="text-xs text-[#8E8E85] dark:text-[#A4A49B] leading-relaxed line-clamp-2">
+                          {act.description}
+                        </p>
+                      </div>
+
+                      {/* Social & Admin Bar */}
+                      <div className="pt-3 border-t border-[#E0E0D8] dark:border-[#383832] flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => toggleActivityLike(act.id)}
+                            className="flex items-center gap-1 text-xs text-[#5A5A40] dark:text-[#C5C5B0] hover:text-red-500 cursor-pointer"
+                          >
+                            <Heart className={`w-3.5 h-3.5 ${act.likes ? 'fill-red-500 text-red-500' : ''}`} />
+                            <span>{act.likes || 0}</span>
+                          </button>
+
+                          <button
+                            onClick={() => handleOpenComments('activity', act)}
+                            className="flex items-center gap-1 text-xs text-[#5A5A40] dark:text-[#C5C5B0] hover:text-[#2D2D2A] dark:hover:text-white cursor-pointer"
+                            title="Buka Komentar Siswa"
+                          >
+                            <MessageCircle className="w-3.5 h-3.5" />
+                            <span>{(act.comments || []).length} Komentar</span>
+                          </button>
+                        </div>
+
+                        {/* Admin Action Controls */}
+                        {isAnyAdmin && (
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => toggleActivityPrivacy(act.id)}
+                              className={`p-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                                act.isPrivate ? 'bg-amber-100 text-amber-900' : 'text-[#8E8E85] hover:bg-[#EAEAE5]'
+                              }`}
+                              title={act.isPrivate ? 'Buka dari Arsip Private' : 'Arsipkan secara Private'}
+                            >
+                              {act.isPrivate ? <Lock className="w-3.5 h-3.5 text-amber-700" /> : <Unlock className="w-3.5 h-3.5" />}
+                            </button>
+                            <button
+                              onClick={() => handleOpenEditActivity(act)}
+                              className="p-1.5 rounded-lg text-[#5A5A40] dark:text-[#C5C5B0] hover:bg-[#EAEAE5] dark:hover:bg-[#282825] text-xs cursor-pointer"
+                              title="Ubah"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => requestDeleteConfirm({
+                                itemName: `Kegiatan "${act.title}"`,
+                                onConfirm: () => deleteActivity(act.id)
+                              })}
+                              className="p-1.5 rounded-lg text-red-600 hover:bg-red-50 text-xs cursor-pointer"
+                              title="Hapus"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+      </ScrollEmboss>
+
+      {/* 🔹 BAGIAN FASILITAS SEKOLAH (Admin Utama bisa menambah, mengubah, menghapus) */}
+      <section className="space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <span className="text-[11px] font-bold uppercase tracking-widest text-[#5A5A40] dark:text-[#A4A485]">
+              Infrastruktur & Lingkungan Belajar
+            </span>
+            <h3 className="font-serif text-2xl font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">
+              Fasilitas Lingkungan Sekolah
+            </h3>
+          </div>
+          
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-semibold text-[#5A5A40] dark:text-[#C5C5B0] bg-[#F5F5F0] dark:bg-[#242422] px-3.5 py-1.5 rounded-full border border-[#E0E0D8] dark:border-[#383832]">
+              {(schoolInfo.fasilitas || []).length} Fasilitas
+            </span>
+
+            {authSession.role === 'super_admin' && (
+              <button
+                id="btn-add-facility"
+                onClick={handleOpenAddFacility}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-[#5A5A40] dark:bg-[#727252] hover:bg-[#484833] text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow-sm transition-all cursor-pointer active:scale-95"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Tambah Fasilitas</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Fasilitas Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          {(schoolInfo.fasilitas || []).map((f, idx) => (
+            <ScrollEmboss key={f.id} delay={idx * 50} interactiveHover className="h-full">
+              <div className="h-full bg-white dark:bg-[#242422] border border-[#E0E0D8] dark:border-[#383832] rounded-[28px] overflow-hidden shadow-sm hover:shadow-md transition-all group flex flex-col justify-between relative">
+                {f.foto ? (
+                  <div className="aspect-[16/10] w-full overflow-hidden bg-[#F5F5F0] dark:bg-[#1E1E1C] relative">
+                    <img
+                      src={f.foto}
+                      alt={f.nama}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      loading="lazy"
+                    />
+                    {f.kondisi && (
+                      <span className="absolute top-3 left-3 bg-white/90 dark:bg-black/80 backdrop-blur-sm px-2.5 py-1 rounded-lg text-[10px] font-bold text-[#5A5A40] dark:text-[#C5C5B0] shadow-xs border border-[#E0E0D8] dark:border-[#383832]">
+                        {f.kondisi}
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="h-28 w-full bg-[#F5F5F0] dark:bg-[#1E1E1C] flex items-center justify-center text-[#5A5A40]/40 relative">
+                    <Building2 className="w-12 h-12" />
+                    {f.kondisi && (
+                      <span className="absolute top-3 left-3 bg-white/90 dark:bg-black/80 backdrop-blur-sm px-2.5 py-1 rounded-lg text-[10px] font-bold text-[#5A5A40] dark:text-[#C5C5B0] shadow-xs border border-[#E0E0D8] dark:border-[#383832]">
+                        {f.kondisi}
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                <div className="p-5 space-y-3 flex-1 flex flex-col justify-between">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 rounded-xl bg-[#F5F5F0] dark:bg-[#1E1E1C] text-[#5A5A40] dark:text-[#C5C5B0] border border-[#E0E0D8] dark:border-[#383832] shrink-0">
+                        {getFacilityIcon(f.icon)}
+                      </div>
+                      <div>
+                        <h4 className="font-serif text-base font-bold text-[#2D2D2A] dark:text-[#F0F0EA] group-hover:text-[#5A5A40] dark:group-hover:text-[#C5C5B0] transition-colors line-clamp-1">
+                          {f.nama}
+                        </h4>
+                        {f.lokasi && (
+                          <p className="text-[11px] text-[#8E8E85] dark:text-[#A4A49B] flex items-center gap-1">
+                            <MapPin className="w-3 h-3 text-[#5A5A40] dark:text-[#C5C5B0]" />
+                            <span>{f.lokasi}</span>
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-xs sm:text-sm text-[#8E8E85] dark:text-[#A4A49B] leading-relaxed">
+                      {f.deskripsi}
+                    </p>
+                  </div>
+
+                  {authSession.role === 'super_admin' && (
+                    <div className="pt-3 border-t border-[#E0E0D8] dark:border-[#383832] flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => handleOpenEditFacility(f)}
+                        className="p-1.5 text-xs font-bold text-[#5A5A40] dark:text-[#C5C5B0] hover:bg-[#F5F5F0] dark:hover:bg-[#1E1E1C] rounded-lg transition-colors cursor-pointer flex items-center gap-1 border border-[#E0E0D8] dark:border-[#383832]"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                        <span>Ubah</span>
+                      </button>
+                      <button
+                        onClick={() => handleDeleteFacility(f)}
+                        className="p-1.5 text-xs font-bold text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer flex items-center gap-1 border border-red-200"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Hapus</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </ScrollEmboss>
+          ))}
+        </div>
+      </section>
+
+      {/* 🔹 BAGIAN KONTAK & MEDIA SOSIAL RESMI */}
+      <ScrollEmboss>
+        <section className="bg-white dark:bg-[#242422] border border-[#E0E0D8] dark:border-[#383832] rounded-[32px] p-6 sm:p-8 shadow-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5">
+            <div className="flex items-start gap-3.5">
+              <div className="p-3 rounded-2xl bg-[#F5F5F0] dark:bg-[#1E1E1C] text-[#5A5A40] dark:text-[#C5C5B0] border border-[#E0E0D8] dark:border-[#383832] shrink-0">
+                <MapPin className="w-5 h-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#8E8E85] dark:text-[#A4A49B] block">Alamat Lengkap</span>
+                <p className="text-xs sm:text-sm font-semibold text-[#2D2D2A] dark:text-[#F0F0EA] mt-0.5 leading-snug">
+                  {schoolInfo.address}, {schoolInfo.city}, {schoolInfo.province} {schoolInfo.postalCode}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-3.5">
+              <div className="p-3 rounded-2xl bg-[#F5F5F0] dark:bg-[#1E1E1C] text-[#5A5A40] dark:text-[#C5C5B0] border border-[#E0E0D8] dark:border-[#383832] shrink-0">
+                <Phone className="w-5 h-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#8E8E85] dark:text-[#A4A49B] block">Telepon Kantor</span>
+                <p className="text-xs sm:text-sm font-semibold text-[#2D2D2A] dark:text-[#F0F0EA] mt-0.5">
+                  {schoolInfo.phone}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-3.5">
+              <div className="p-3 rounded-2xl bg-[#F5F5F0] dark:bg-[#1E1E1C] text-[#5A5A40] dark:text-[#C5C5B0] border border-[#E0E0D8] dark:border-[#383832] shrink-0">
+                <Mail className="w-5 h-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#8E8E85] dark:text-[#A4A49B] block">Email Resmi</span>
+                <p className="text-xs sm:text-sm font-semibold text-[#2D2D2A] dark:text-[#F0F0EA] mt-0.5 break-all">
+                  {schoolInfo.email}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-3.5">
+              <div className="p-3 rounded-2xl bg-[#F5F5F0] dark:bg-[#1E1E1C] text-[#5A5A40] dark:text-[#C5C5B0] border border-[#E0E0D8] dark:border-[#383832] shrink-0">
+                <Globe className="w-5 h-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#8E8E85] dark:text-[#A4A49B] block">Website Sekolah</span>
+                <p className="text-xs sm:text-sm font-semibold text-[#2D2D2A] dark:text-[#F0F0EA] mt-0.5 break-all">
+                  {schoolInfo.website}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-3.5 bg-black/5 dark:bg-white/5 p-3 rounded-2xl border border-black/10 dark:border-white/10">
+              <div className="p-2.5 rounded-xl bg-black text-white shrink-0 shadow-sm">
+                <TikTokIcon className="w-4 h-4 text-white" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#8E8E85] dark:text-[#A4A49B] block">TikTok Sekolah</span>
+                {schoolInfo.tiktokUrl ? (
+                  <a
+                    href={schoolInfo.tiktokUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs sm:text-sm font-bold text-black dark:text-white hover:text-[#5A5A40] mt-0.5 flex items-center gap-1 group"
+                  >
+                    <span className="truncate">Akun Sekolah</span>
+                    <ExternalLink className="w-3.5 h-3.5 text-[#8E8E85] group-hover:text-black dark:group-hover:text-white shrink-0" />
+                  </a>
+                ) : (
+                  <span className="text-xs text-[#8E8E85] dark:text-[#A4A49B] italic block mt-0.5">Belum diatur</span>
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
+      </ScrollEmboss>
+
+      {/* 🔹 👑 VISI & MISI SEKOLAH (DIPINDAHKAN KE PALING BAWAH SESUAI INSTRUKSI USER) */}
+      <ScrollEmboss>
+        <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="bg-white dark:bg-[#242422] border border-[#E0E0D8] dark:border-[#383832] rounded-[32px] p-6 sm:p-8 shadow-sm flex flex-col justify-between space-y-4">
+            <div className="space-y-3">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-xl bg-[#F5F5F0] dark:bg-[#1E1E1C] text-[#5A5A40] dark:text-[#C5C5B0] text-xs font-bold uppercase tracking-wider border border-[#E0E0D8] dark:border-[#383832]">
+                <Compass className="w-3.5 h-3.5 text-[#5A5A40] dark:text-[#C5C5B0]" />
+                <span>Visi Masa Depan</span>
+              </div>
+              <h3 className="font-serif text-xl sm:text-2xl font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">
+                Visi Sekolah
+              </h3>
+              <p className="text-[#8E8E85] dark:text-[#A4A49B] text-sm sm:text-base leading-relaxed italic">
+                "{schoolInfo.visi}"
+              </p>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-[#242422] border border-[#E0E0D8] dark:border-[#383832] rounded-[32px] p-6 sm:p-8 shadow-sm flex flex-col justify-between space-y-4">
+            <div className="space-y-3">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-xl bg-[#F5F5F0] dark:bg-[#1E1E1C] text-[#5A5A40] dark:text-[#C5C5B0] text-xs font-bold uppercase tracking-wider border border-[#E0E0D8] dark:border-[#383832]">
+                <Target className="w-3.5 h-3.5 text-[#5A5A40] dark:text-[#C5C5B0]" />
+                <span>Langkah Nyata</span>
+              </div>
+              <h3 className="font-serif text-xl sm:text-2xl font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">
+                Misi Sekolah
+              </h3>
+              <ul className="space-y-2 text-sm text-[#8E8E85] dark:text-[#A4A49B]">
+                {(schoolInfo.misi || []).map((m, idx) => (
+                  <li key={idx} className="flex items-start gap-2.5">
+                    <span className="w-5 h-5 rounded-full bg-[#F5F5F0] dark:bg-[#1E1E1C] text-[#5A5A40] dark:text-[#C5C5B0] font-bold text-xs flex items-center justify-center shrink-0 mt-0.5 border border-[#E0E0D8] dark:border-[#383832]">
+                      {idx + 1}
+                    </span>
+                    <span className="leading-snug">{m}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </section>
+      </ScrollEmboss>
+
+      {/* 🔹 👑 SEJARAH SEKOLAH (DIPINDAHKAN KE PALING BAWAH SESUAI INSTRUKSI USER) */}
+      {schoolInfo.sejarah && (
+        <ScrollEmboss>
+          <section className="bg-white dark:bg-[#242422] border border-[#E0E0D8] dark:border-[#383832] rounded-[32px] p-6 sm:p-8 shadow-sm space-y-4">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-xl bg-[#F5F5F0] dark:bg-[#1E1E1C] text-[#5A5A40] dark:text-[#C5C5B0] text-xs font-bold uppercase tracking-wider border border-[#E0E0D8] dark:border-[#383832]">
+              <History className="w-3.5 h-3.5 text-[#5A5A40] dark:text-[#C5C5B0]" />
+              <span>Rekam Jejak Historis</span>
+            </div>
+            <h3 className="font-serif text-xl sm:text-2xl font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">
+              Sejarah & Perjalanan Sekolah
+            </h3>
+            <p className="text-sm sm:text-base text-[#8E8E85] dark:text-[#A4A49B] leading-relaxed whitespace-pre-line">
+              {schoolInfo.sejarah}
+            </p>
+          </section>
+        </ScrollEmboss>
+      )}
+
+      {/* 🔹 🌐 PUSAT EKSPOR FILE HTML & QR DIGITAL KENANGAN SEKOLAH (DITURUNKAN DI BERANDA) */}
+      <ScrollEmboss>
+        <section className="bg-white dark:bg-[#242422] border-2 border-[#5A5A40]/30 dark:border-[#727252]/40 rounded-[32px] p-6 sm:p-8 shadow-sm relative overflow-hidden">
+          <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
+            <div className="space-y-2.5 max-w-2xl">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#5A5A40]/10 dark:bg-[#5A5A40]/30 text-[#5A5A40] dark:text-[#C5C5B0] text-xs font-bold uppercase tracking-wider border border-[#5A5A40]/20">
+                <FileCode className="w-3.5 h-3.5 text-[#5A5A40] dark:text-[#C5C5B0]" />
+                <span>Ekspor File HTML Offline & Kode QR Digital</span>
+              </div>
+              <h3 className="font-serif text-xl sm:text-2xl lg:text-3xl font-bold text-[#2D2D2A] dark:text-[#F0F0EA] tracking-tight">
+                Simpan & Bagikan Website dalam Format File HTML
+              </h3>
+              <p className="text-xs sm:text-sm text-[#8E8E85] dark:text-[#A4A49B] leading-relaxed">
+                Unduh seluruh data profil sekolah, {classes.length} kelas, {students.length} siswa, {teachers.length} guru, pengumuman, agenda kalender, dan ekstrakurikuler ke dalam <strong>satu file HTML mandiri</strong> yang dapat dibuka di browser mana pun tanpa koneksi server.
+              </p>
+
+              {/* Data Summary Badges */}
+              <div className="flex flex-wrap items-center gap-2 pt-2">
+                <span className="px-3 py-1 bg-[#F5F5F0] dark:bg-[#1E1E1C] text-[#5A5A40] dark:text-[#C5C5B0] text-xs font-bold rounded-xl border border-[#E0E0D8] dark:border-[#383832]">
+                  🏛️ {classes.length} Ruang Kelas
+                </span>
+                <span className="px-3 py-1 bg-[#F5F5F0] dark:bg-[#1E1E1C] text-[#5A5A40] dark:text-[#C5C5B0] text-xs font-bold rounded-xl border border-[#E0E0D8] dark:border-[#383832]">
+                  🎓 {students.length} Siswa & Kenangan
+                </span>
+                <span className="px-3 py-1 bg-[#F5F5F0] dark:bg-[#1E1E1C] text-[#5A5A40] dark:text-[#C5C5B0] text-xs font-bold rounded-xl border border-[#E0E0D8] dark:border-[#383832]">
+                  👨‍🏫 {teachers.length} Dewan Guru
+                </span>
+                <span className="px-3 py-1 bg-[#F5F5F0] dark:bg-[#1E1E1C] text-[#5A5A40] dark:text-[#C5C5B0] text-xs font-bold rounded-xl border border-[#E0E0D8] dark:border-[#383832]">
+                  📢 {announcements.length} Pengumuman
+                </span>
+              </div>
+            </div>
+
+            {/* Action Buttons: Pop-up File HTML & QR Code */}
+            <div className="flex flex-col sm:flex-row lg:flex-col gap-3 w-full lg:w-auto shrink-0">
+              <button
+                id="btn-open-html-export-bottom"
+                onClick={() => setIsExportModalOpen(true)}
+                className="px-6 py-3.5 bg-[#5A5A40] hover:bg-[#484833] text-white rounded-2xl text-xs sm:text-sm font-bold uppercase tracking-wider flex items-center justify-center gap-3 shadow-md hover:shadow-lg transition-all cursor-pointer active:scale-95"
+              >
+                <Download className="w-4 h-4" />
+                <span>Buka Pop-up & Unduh File HTML</span>
+              </button>
+
+              <button
+                id="btn-open-qr-portal-bottom"
+                onClick={() => setQrModalData({
+                  type: 'school',
+                  id: 'school-main-portal',
+                  title: schoolInfo.name,
+                  subtitle: `${schoolInfo.tagline || 'Portal Buku Kenangan & Profil Resmi Sekolah'} • NPSN ${schoolInfo.npsn}`,
+                  category: 'Portal Sekolah'
+                })}
+                className="px-6 py-3.5 bg-[#F5F5F0] dark:bg-[#1E1E1C] hover:bg-[#E0E0D8] dark:hover:bg-[#383832] text-[#5A5A40] dark:text-[#C5C5B0] border border-[#E0E0D8] dark:border-[#383832] rounded-2xl text-xs sm:text-sm font-bold uppercase tracking-wider flex items-center justify-center gap-2.5 transition-all cursor-pointer active:scale-95 shadow-2xs"
+              >
+                <QrCode className="w-4 h-4" />
+                <span>Pindai / Bagikan QR Portal</span>
+              </button>
+            </div>
+          </div>
+        </section>
+      </ScrollEmboss>
+
+      {/* 🔹 HUBUNGI ADMIN UTAMA PEMBUAT (WHATSAPP) */}
+      <ScrollEmboss>
+        <section className="bg-gradient-to-br from-[#5A5A40] to-[#484833] dark:from-[#3E3E2C] dark:to-[#28281C] text-white rounded-[32px] p-6 sm:p-10 shadow-md relative overflow-hidden">
+          <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="space-y-2 text-center md:text-left">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-white text-xs font-semibold backdrop-blur-sm border border-white/20">
+                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                <span>Pusat Pengembangan & Layanan Sistem</span>
+              </div>
+              <h3 className="font-serif text-2xl sm:text-3xl font-bold tracking-tight">
+                tambahkan fitur? hubungi admin utama(pembuat)
+              </h3>
+              <p className="text-white/80 text-xs sm:text-sm max-w-xl">
+                Butuh penyesuaian tata letak, modul baru, atau reset sesi login? Hubungi langsung pengembang sistem <strong>{schoolInfo.creatorName || 'Waa-O51W'}</strong> melalui WhatsApp.
+              </p>
+            </div>
+
+            <a
+              id="btn-whatsapp-creator-home"
+              href={waUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-6 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-xs sm:text-sm font-bold uppercase tracking-wider flex items-center gap-3 shadow-lg hover:shadow-xl transition-all cursor-pointer shrink-0 active:scale-95"
+            >
+              <MessageCircle className="w-5 h-5 text-white" />
+              <span>Hubungi WA {schoolInfo.creatorName || 'Waa-O51W'}</span>
+            </a>
+          </div>
+        </section>
+      </ScrollEmboss>
+
+      {/* 🔹 INTERACTIVE COMMENTS MODAL (MENAMPILKAN KOMENTAR SISWA & INTERAKSI) */}
+      {activeCommentItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white dark:bg-[#242422] border border-[#E0E0D8] dark:border-[#383832] rounded-3xl max-w-lg w-full p-6 shadow-2xl flex flex-col max-h-[85vh]">
+            <div className="flex items-center justify-between border-b border-[#E0E0D8] dark:border-[#383832] pb-4">
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#5A5A40] dark:text-[#C5C5B0] block">
+                  Komentar & Respon Siswa
+                </span>
+                <h4 className="font-serif text-lg font-bold text-[#2D2D2A] dark:text-[#F0F0EA] line-clamp-1">
+                  {activeCommentItem.title}
+                </h4>
+              </div>
+              <button
+                onClick={() => setActiveCommentItem(null)}
+                className="p-2 rounded-xl text-[#8E8E85] hover:bg-[#F5F5F0] dark:hover:bg-[#1E1E1C] cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Comments List */}
+            <div className="flex-1 overflow-y-auto py-4 space-y-3 no-scrollbar">
+              {(!activeCommentItem.comments || activeCommentItem.comments.length === 0) ? (
+                <div className="text-center py-8 text-[#8E8E85] dark:text-[#A4A49B] text-xs">
+                  <MessageCircle className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                  <p>Belum ada komentar. Jadilah yang pertama memberikan respon!</p>
+                </div>
+              ) : (
+                (activeCommentItem.comments || []).map((comm: any, idx: number) => (
+                  <div key={comm.id || idx} className="p-3 bg-[#F5F5F0] dark:bg-[#1E1E1C] rounded-2xl border border-[#E0E0D8] dark:border-[#383832] space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-[#5A5A40] dark:text-[#C5C5B0]">
+                        {comm.authorName}
+                      </span>
+                      <span className="text-[10px] text-[#8E8E85] dark:text-[#A4A49B]">
+                        {comm.createdAt ? new Date(comm.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : ''}
+                      </span>
+                    </div>
+                    <p className="text-xs text-[#2D2D2A] dark:text-[#EAEAE2] leading-relaxed">
+                      {comm.content}
+                    </p>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Comment Form */}
+            <form onSubmit={handleSubmitComment} className="pt-4 border-t border-[#E0E0D8] dark:border-[#383832] flex items-center gap-2">
+              <input
+                type="text"
+                value={commentInput}
+                onChange={(e) => setCommentInput(e.target.value)}
+                placeholder="Tulis komentar atau tanggapan Anda..."
+                className="flex-1 px-4 py-2.5 bg-[#F5F5F0] dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#383832] rounded-xl text-xs text-[#2D2D2A] dark:text-[#F0F0EA] focus:outline-hidden focus:ring-2 focus:ring-[#5A5A40]"
+              />
+              <button
+                type="submit"
+                className="p-2.5 bg-[#5A5A40] hover:bg-[#484833] text-white rounded-xl cursor-pointer active:scale-95 transition-all shadow-xs"
+              >
+                <Send className="w-4 h-4" />
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 🔹 EDIT SCHOOL INFO MODAL */}
+      {isEditingInfo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white dark:bg-[#242422] border border-[#E0E0D8] dark:border-[#383832] rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto my-auto">
+            <div className="flex items-center justify-between border-b border-[#E0E0D8] dark:border-[#383832] pb-4">
+              <h3 className="font-serif text-xl font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">
+                Ubah Informasi & Profil Sekolah
+              </h3>
+              <button
+                onClick={() => setIsEditingInfo(false)}
+                className="p-2 text-[#8E8E85] hover:bg-[#F5F5F0] dark:hover:bg-[#1E1E1C] rounded-xl"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveInfo} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-bold uppercase text-[#8E8E85] block mb-1">Nama Sekolah</label>
+                  <input
+                    type="text"
+                    value={formData.name}
+                    onChange={e => setFormData({ ...formData, name: e.target.value })}
+                    className="w-full px-4 py-2.5 bg-[#F5F5F0] dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#383832] rounded-xl text-xs"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold uppercase text-[#8E8E85] block mb-1">Akreditasi</label>
+                  <input
+                    type="text"
+                    value={formData.akreditasi}
+                    onChange={e => setFormData({ ...formData, akreditasi: e.target.value })}
+                    className="w-full px-4 py-2.5 bg-[#F5F5F0] dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#383832] rounded-xl text-xs"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold uppercase text-[#8E8E85] block mb-1">Slogan / Tagline</label>
+                <input
+                  type="text"
+                  value={formData.tagline}
+                  onChange={e => setFormData({ ...formData, tagline: e.target.value })}
+                  className="w-full px-4 py-2.5 bg-[#F5F5F0] dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#383832] rounded-xl text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold uppercase text-[#8E8E85] block mb-1">Link Akun TikTok Resmi Sekolah</label>
+                <input
+                  type="url"
+                  value={formData.tiktokUrl}
+                  onChange={e => setFormData({ ...formData, tiktokUrl: e.target.value })}
+                  placeholder="https://www.tiktok.com/@namasekolah"
+                  className="w-full px-4 py-2.5 bg-[#F5F5F0] dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#383832] rounded-xl text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold uppercase text-[#8E8E85] block mb-1">Visi Sekolah</label>
+                <textarea
+                  rows={3}
+                  value={formData.visi}
+                  onChange={e => setFormData({ ...formData, visi: e.target.value })}
+                  className="w-full px-4 py-2.5 bg-[#F5F5F0] dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#383832] rounded-xl text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold uppercase text-[#8E8E85] block mb-1">Misi Sekolah (Satu baris per poin)</label>
+                <textarea
+                  rows={4}
+                  value={formData.misiText}
+                  onChange={e => setFormData({ ...formData, misiText: e.target.value })}
+                  className="w-full px-4 py-2.5 bg-[#F5F5F0] dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#383832] rounded-xl text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold uppercase text-[#8E8E85] block mb-1">Sejarah Sekolah</label>
+                <textarea
+                  rows={4}
+                  value={formData.sejarah}
+                  onChange={e => setFormData({ ...formData, sejarah: e.target.value })}
+                  className="w-full px-4 py-2.5 bg-[#F5F5F0] dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#383832] rounded-xl text-xs"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-[#E0E0D8] dark:border-[#383832]">
+                <button
+                  type="button"
+                  onClick={() => setIsEditingInfo(false)}
+                  className="px-5 py-2.5 rounded-xl border border-[#E0E0D8] text-xs font-bold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 bg-[#5A5A40] text-white rounded-xl text-xs font-bold uppercase shadow-sm"
+                >
+                  Simpan Perubahan
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 🔹 ADD/EDIT ACTIVITY MODAL (WITH BATCH MULTI-MEDIA UPLOAD) */}
+      {isActivityModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white dark:bg-[#242422] border border-[#E0E0D8] dark:border-[#383832] rounded-3xl max-w-xl w-full p-6 shadow-2xl space-y-5 my-auto max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-[#E0E0D8] dark:border-[#383832] pb-4">
+              <h3 className="font-serif text-lg font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">
+                {editingActivity ? 'Ubah Kegiatan Sekolah' : 'Upload Foto / Video Kegiatan'}
+              </h3>
+              <button
+                onClick={() => setIsActivityModalOpen(false)}
+                className="p-2 text-[#8E8E85] hover:bg-[#F5F5F0] dark:hover:bg-[#1E1E1C] rounded-xl"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveActivity} className="space-y-4">
+              <div>
+                <label className="text-xs font-bold uppercase text-[#8E8E85] block mb-1">Judul Kegiatan</label>
+                <input
+                  type="text"
+                  value={activityForm.title}
+                  onChange={e => setActivityForm({ ...activityForm, title: e.target.value })}
+                  placeholder="Contoh: Upacara Hari Pahlawan Nasional"
+                  className="w-full px-4 py-2.5 bg-[#F5F5F0] dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#383832] rounded-xl text-xs"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold uppercase text-[#8E8E85] block mb-1">Kategori</label>
+                  <select
+                    value={activityForm.category}
+                    onChange={e => setActivityForm({ ...activityForm, category: e.target.value })}
+                    className="w-full px-4 py-2.5 bg-[#F5F5F0] dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#383832] rounded-xl text-xs"
+                  >
+                    {(activityCategories || []).map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-bold uppercase text-[#8E8E85] block mb-1">Tanggal</label>
+                  <input
+                    type="text"
+                    value={activityForm.date}
+                    onChange={e => setActivityForm({ ...activityForm, date: e.target.value })}
+                    className="w-full px-4 py-2.5 bg-[#F5F5F0] dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#383832] rounded-xl text-xs"
+                  />
+                </div>
+              </div>
+
+              {/* Multi-Media Upload Component */}
+              <MediaUploadField
+                label="Foto / Video Kegiatan (Bisa Upload Beberapa Sekaligus)"
+                value={activityForm.mediaUrl}
+                mediaType={activityForm.mediaType}
+                onChange={(url, type) => {
+                  setActivityForm(prev => ({
+                    ...prev,
+                    mediaUrl: url,
+                    mediaType: type || 'image',
+                    batchUrls: [...prev.batchUrls, url]
+                  }));
+                }}
+              />
+
+              <div>
+                <label className="text-xs font-bold uppercase text-[#8E8E85] block mb-1">Deskripsi / Cerita Singkat</label>
+                <textarea
+                  rows={3}
+                  value={activityForm.description}
+                  onChange={e => setActivityForm({ ...activityForm, description: e.target.value })}
+                  placeholder="Ceritakan momen seru kegiatan ini..."
+                  className="w-full px-4 py-2.5 bg-[#F5F5F0] dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#383832] rounded-xl text-xs"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-[#E0E0D8] dark:border-[#383832]">
+                <button
+                  type="button"
+                  onClick={() => setIsActivityModalOpen(false)}
+                  className="px-5 py-2.5 rounded-xl border border-[#E0E0D8] text-xs font-bold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 bg-[#5A5A40] text-white rounded-xl text-xs font-bold uppercase shadow-sm"
+                >
+                  Simpan & Publikasikan
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 🔹 ADD/EDIT ANNOUNCEMENT MODAL */}
+      {isAnnouncementModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white dark:bg-[#242422] border border-[#E0E0D8] dark:border-[#383832] rounded-3xl max-w-xl w-full p-6 shadow-2xl space-y-5 my-auto">
+            <div className="flex items-center justify-between border-b border-[#E0E0D8] dark:border-[#383832] pb-4">
+              <h3 className="font-serif text-lg font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">
+                {editingAnnouncement ? 'Ubah Pengumuman' : 'Buat Pengumuman Baru'}
+              </h3>
+              <button
+                onClick={() => setIsAnnouncementModalOpen(false)}
+                className="p-2 text-[#8E8E85] hover:bg-[#F5F5F0] dark:hover:bg-[#1E1E1C] rounded-xl"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveAnnouncement} className="space-y-4">
+              <div>
+                <label className="text-xs font-bold uppercase text-[#8E8E85] block mb-1">Judul Pengumuman</label>
+                <input
+                  type="text"
+                  value={announcementForm.title}
+                  onChange={e => setAnnouncementForm({ ...announcementForm, title: e.target.value })}
+                  placeholder="Contoh: Jadwal Ujian Tengah Semester Genap"
+                  className="w-full px-4 py-2.5 bg-[#F5F5F0] dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#383832] rounded-xl text-xs"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold uppercase text-[#8E8E85] block mb-1">Kategori</label>
+                  <input
+                    type="text"
+                    value={announcementForm.category}
+                    onChange={e => setAnnouncementForm({ ...announcementForm, category: e.target.value })}
+                    className="w-full px-4 py-2.5 bg-[#F5F5F0] dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#383832] rounded-xl text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold uppercase text-[#8E8E85] block mb-1">Penulis / Penerbit</label>
+                  <input
+                    type="text"
+                    value={announcementForm.author}
+                    onChange={e => setAnnouncementForm({ ...announcementForm, author: e.target.value })}
+                    className="w-full px-4 py-2.5 bg-[#F5F5F0] dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#383832] rounded-xl text-xs"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold uppercase text-[#8E8E85] block mb-1">Isi Pengumuman</label>
+                <textarea
+                  rows={5}
+                  value={announcementForm.content}
+                  onChange={e => setAnnouncementForm({ ...announcementForm, content: e.target.value })}
+                  placeholder="Rincian informasi pengumuman..."
+                  className="w-full px-4 py-2.5 bg-[#F5F5F0] dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#383832] rounded-xl text-xs"
+                  required
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="ann-pinned"
+                  checked={announcementForm.isPinned}
+                  onChange={e => setAnnouncementForm({ ...announcementForm, isPinned: e.target.checked })}
+                  className="rounded border-[#E0E0D8]"
+                />
+                <label htmlFor="ann-pinned" className="text-xs text-[#2D2D2A] dark:text-[#EAEAE2] cursor-pointer">
+                  Sematkan pengumuman ini di bagian paling atas
+                </label>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-[#E0E0D8] dark:border-[#383832]">
+                <button
+                  type="button"
+                  onClick={() => setIsAnnouncementModalOpen(false)}
+                  className="px-5 py-2.5 rounded-xl border border-[#E0E0D8] text-xs font-bold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 bg-[#5A5A40] text-white rounded-xl text-xs font-bold uppercase shadow-sm"
+                >
+                  Terbitkan Pengumuman
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 🔹 ADD/EDIT FACILITY MODAL */}
+      {isFacilityModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white dark:bg-[#242422] border border-[#E0E0D8] dark:border-[#383832] rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 my-auto">
+            <div className="flex items-center justify-between border-b border-[#E0E0D8] dark:border-[#383832] pb-4">
+              <h3 className="font-serif text-lg font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">
+                {editingFacility ? 'Ubah Data Fasilitas' : 'Tambah Fasilitas Sekolah'}
+              </h3>
+              <button
+                onClick={() => setIsFacilityModalOpen(false)}
+                className="p-2 text-[#8E8E85] hover:bg-[#F5F5F0] dark:hover:bg-[#1E1E1C] rounded-xl"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveFacility} className="space-y-4">
+              <div>
+                <label className="text-xs font-bold uppercase text-[#8E8E85] block mb-1">Nama Fasilitas</label>
+                <input
+                  type="text"
+                  value={facilityForm.nama}
+                  onChange={e => setFacilityForm({ ...facilityForm, nama: e.target.value })}
+                  placeholder="Contoh: Laboratorium Komputer AI"
+                  className="w-full px-4 py-2.5 bg-[#F5F5F0] dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#383832] rounded-xl text-xs"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold uppercase text-[#8E8E85] block mb-1">Lokasi Gedung / Lantai</label>
+                <input
+                  type="text"
+                  value={facilityForm.lokasi}
+                  onChange={e => setFacilityForm({ ...facilityForm, lokasi: e.target.value })}
+                  placeholder="Gedung C Lantai 2"
+                  className="w-full px-4 py-2.5 bg-[#F5F5F0] dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#383832] rounded-xl text-xs"
+                />
+              </div>
+
+              <MediaUploadField
+                label="Foto Fasilitas (Opsional)"
+                value={facilityForm.foto}
+                onChange={url => setFacilityForm({ ...facilityForm, foto: url })}
+              />
+
+              <div>
+                <label className="text-xs font-bold uppercase text-[#8E8E85] block mb-1">Deskripsi Fasilitas</label>
+                <textarea
+                  rows={3}
+                  value={facilityForm.deskripsi}
+                  onChange={e => setFacilityForm({ ...facilityForm, deskripsi: e.target.value })}
+                  placeholder="Dilengkapi 40 unit PC berkecepatan tinggi..."
+                  className="w-full px-4 py-2.5 bg-[#F5F5F0] dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#383832] rounded-xl text-xs"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-[#E0E0D8] dark:border-[#383832]">
+                <button
+                  type="button"
+                  onClick={() => setIsFacilityModalOpen(false)}
+                  className="px-5 py-2.5 rounded-xl border border-[#E0E0D8] text-xs font-bold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 bg-[#5A5A40] text-white rounded-xl text-xs font-bold uppercase shadow-sm"
+                >
+                  Simpan Fasilitas
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* 📁 HTML EXPORT MODAL */}
+      <HtmlExportModal
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+      />
+
+      {/* 📱 QR CODE MODAL */}
+      <QRCodeModal
+        isOpen={!!qrModalData}
+        onClose={() => setQrModalData(null)}
+        data={qrModalData}
+      />
+    </div>
+  );
+};

@@ -1,0 +1,349 @@
+import React, { useState } from 'react';
+import { useApp, MainNavView } from '../context/AppContext';
+import { 
+  Home, 
+  Camera, 
+  Megaphone, 
+  School, 
+  Award, 
+  Users, 
+  UserCheck,
+  Archive,
+  ShieldCheck,
+  Grid,
+  Calendar,
+  BookOpen,
+  HeartHandshake,
+  Mail,
+  Lock,
+  History,
+  Printer,
+  Crown,
+  UtensilsCrossed,
+  HelpCircle,
+  FileText,
+  Sparkles,
+  Heart,
+  X,
+  ChevronRight,
+  GraduationCap,
+  FileCode
+} from 'lucide-react';
+
+interface QuickNavItem {
+  id: MainNavView;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  badge?: number;
+  highlight?: boolean;
+}
+
+interface MenuCatalogItem {
+  id: MainNavView;
+  label: string;
+  subtitle: string;
+  category: 'Utama & Akademik' | 'Kesiswaan & Prestasi' | 'Layanan Sekolah' | 'Kenangan & Arsip' | 'Google Workspace';
+  icon: React.ComponentType<{ className?: string }>;
+  badge?: number;
+  highlight?: boolean;
+}
+
+export const BottomNav: React.FC = () => {
+  const { 
+    currentView, 
+    setCurrentView, 
+    setSelectedClassId, 
+    setSelectedEskulId,
+    setIsAdminPanelOpen, 
+    announcements, 
+    authSession 
+  } = useApp();
+
+  const [isCatalogOpen, setIsCatalogOpen] = useState<boolean>(false);
+  const [selectedCatalogCategory, setSelectedCatalogCategory] = useState<string>('Semua');
+
+  const isSuperAdmin = authSession.role === 'super_admin';
+  const isAnyAdmin = 
+    authSession.role === 'super_admin' || 
+    authSession.role === 'custom_admin' || 
+    authSession.role === 'class_admin' || 
+    authSession.role === 'eskul_admin';
+
+  // Primary Quick Items in the Bottom Bar
+  const quickNavItems: QuickNavItem[] = [
+    { id: 'home', label: 'BERANDA', icon: Home },
+    { id: 'announcements', label: 'PENGUMUMAN', icon: Megaphone, badge: announcements.length },
+    { id: 'classes', label: 'KELAS', icon: School },
+    { id: 'eskul', label: 'ESKUL', icon: Award },
+    { id: 'teachers', label: 'GURU', icon: Users },
+    { id: 'osis', label: 'OSIS', icon: UserCheck },
+    ...(isAnyAdmin
+      ? [{ id: 'archived_posts' as MainNavView, label: 'ARSIP', icon: Archive }]
+      : []),
+    ...(isSuperAdmin
+      ? [{ id: 'admin_panel' as MainNavView, label: 'ADMIN', icon: ShieldCheck, highlight: true }]
+      : [])
+  ];
+
+  // Full Catalog of All School Menus (19 Features)
+  const fullMenuCatalog: MenuCatalogItem[] = [
+    // Utama & Akademik
+    { id: 'home', label: 'Beranda Sekolah', subtitle: 'Profil & pusat informasi sekolah', category: 'Utama & Akademik', icon: Home },
+    { id: 'announcements', label: 'Pengumuman Resmi', subtitle: 'Berita & agenda mendesak', category: 'Utama & Akademik', icon: Megaphone, badge: announcements.length },
+    { id: 'activities', label: 'Galeri Kegiatan', subtitle: 'Dokumentasi foto & video acara', category: 'Utama & Akademik', icon: Camera },
+    { id: 'classes', label: 'Ruang Kelas & Siswa', subtitle: 'Pojok kreasi & struktur kelas', category: 'Utama & Akademik', icon: School },
+    { id: 'schedules', label: 'Jadwal Pelajaran & Bel', subtitle: 'Mata pelajaran & jam masuk/pulang', category: 'Utama & Akademik', icon: BookOpen },
+    { id: 'calendar', label: 'Kalender Akademik', subtitle: 'Jadwal ujian, libur & pembagian rapor', category: 'Utama & Akademik', icon: Calendar },
+    { id: 'teachers', label: 'Dewan Guru & Staf', subtitle: 'Direktori pengajar & kontak', category: 'Utama & Akademik', icon: Users },
+    { id: 'teacher_notes', label: 'Catatan Guru & Evaluasi', subtitle: 'Rapor karakter & perkembangan siswa', category: 'Utama & Akademik', icon: FileText },
+    { id: 'cleaning_schedule', label: 'Piket Kebersihan', subtitle: 'Jadwal regu kebersihan kelas harian', category: 'Utama & Akademik', icon: Sparkles },
+
+    // Kesiswaan & Prestasi
+    { id: 'eskul', label: 'Ekstrakurikuler', subtitle: 'Klub bakat, minat & ruang obrolan', category: 'Kesiswaan & Prestasi', icon: Award },
+    { id: 'osis', label: 'Organisasi Siswa (OSIS)', subtitle: 'Struktur kepengurusan & program kerja', category: 'Kesiswaan & Prestasi', icon: UserCheck },
+    { id: 'achievements', label: 'Prestasi & Kejuaraan', subtitle: 'Piala, piagam & lomba siswa', category: 'Kesiswaan & Prestasi', icon: Award },
+    { id: 'school_ranks', label: 'Juara Umum & Peringkat', subtitle: 'Bintang pelajar & nilai tertinggi', category: 'Kesiswaan & Prestasi', icon: Crown },
+    { id: 'study_clubs', label: 'Kelompok Belajar & Tutor', subtitle: 'Forum tanya-jawab soal & bimbingan', category: 'Kesiswaan & Prestasi', icon: Users },
+
+    // Layanan Sekolah
+    { id: 'library', label: 'Perpustakaan Digital', subtitle: 'Katalog buku kurikulum & e-book', category: 'Layanan Sekolah', icon: BookOpen },
+    { id: 'canteen', label: 'Kantin & Pre-Order', subtitle: 'Pesan makanan istirahat tanpa antre', category: 'Layanan Sekolah', icon: UtensilsCrossed },
+    { id: 'uks', label: 'UKS & Layanan Medis', subtitle: 'Petugas kesehatan & stok obat', category: 'Layanan Sekolah', icon: HeartHandshake },
+    { id: 'lost_found', label: 'Barang Hilang (Lost & Found)', subtitle: 'Pusat penemuan barang tertinggal', category: 'Layanan Sekolah', icon: HelpCircle },
+    { id: 'contact', label: 'Kontak & Aspirasi', subtitle: 'Kirim pesan & pertanyaan resmi', category: 'Layanan Sekolah', icon: Mail },
+    { id: 'parenting', label: 'Pojok Parenting', subtitle: 'Artikel edukasi orang tua & remaja', category: 'Layanan Sekolah', icon: Heart },
+
+    // Google Workspace
+    { id: 'google_workspace', label: 'Google Workspace Hub', subtitle: 'Pusat integrasi Calendar, Gmail & Classroom', category: 'Google Workspace', icon: Sparkles, highlight: true },
+    { id: 'google_calendar', label: 'Google Calendar', subtitle: 'Agenda pribadi & sinkronisasi jadwal sekolah', category: 'Google Workspace', icon: Calendar },
+    { id: 'gmail', label: 'Gmail Terpadu', subtitle: 'Kotak masuk pesan & kirim email resmi', category: 'Google Workspace', icon: Mail },
+    { id: 'google_classroom', label: 'Google Classroom', subtitle: 'Materi, tugas online & pengumuman kelas', category: 'Google Workspace', icon: GraduationCap },
+
+    // Kenangan & Arsip
+    { id: 'html_export', label: 'Ekspor Website (.HTML)', subtitle: 'Simpan file website mandiri siap buka offline', category: 'Kenangan & Arsip', icon: FileCode, highlight: true },
+    { id: 'alumni', label: 'Alumni & Jejak Karir', subtitle: 'Buku kenangan lulusan & pesan kesan', category: 'Kenangan & Arsip', icon: GraduationCap },
+    { id: 'history', label: 'Linimasa Sejarah & Foto Lawas', subtitle: 'Nostalgia tempo dulu & perkembangan', category: 'Kenangan & Arsip', icon: History },
+    { id: 'photo_orders', label: 'Pesan Cetak Foto', subtitle: 'Cetak foto glossy studio & album', category: 'Kenangan & Arsip', icon: Printer },
+    { id: 'internal_messages', label: 'Pesan Internal Sekolah', subtitle: 'Saluran koordinasi tertutup dewan guru', category: 'Kenangan & Arsip', icon: Lock },
+    ...(isAnyAdmin ? [{ id: 'archived_posts' as MainNavView, label: 'Arsip Data Terhapus', subtitle: 'Pemulihan & recycle bin', category: 'Kenangan & Arsip' as const, icon: Archive }] : []),
+    ...(isSuperAdmin ? [{ id: 'admin_panel' as MainNavView, label: 'Panel Super Admin', subtitle: 'Kontrol penuh sistem sekolah', category: 'Kenangan & Arsip' as const, icon: ShieldCheck, highlight: true }] : [])
+  ];
+
+  const handleNavClick = (view: MainNavView) => {
+    setIsCatalogOpen(false);
+    if (view === 'admin_panel') {
+      setIsAdminPanelOpen(true);
+      setCurrentView('admin_panel');
+    } else {
+      setIsAdminPanelOpen(false);
+      if (view !== 'classes') {
+        setSelectedClassId(null);
+      }
+      if (view !== 'eskul') {
+        setSelectedEskulId(null);
+      }
+      setCurrentView(view);
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const filteredCatalog = fullMenuCatalog.filter(item => {
+    return selectedCatalogCategory === 'Semua' || item.category === selectedCatalogCategory;
+  });
+
+  return (
+    <>
+      {/* Full Menu Catalog Modal / Bottom Drawer */}
+      {isCatalogOpen && (
+        <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-xs animate-fade-in">
+          <div 
+            className="fixed inset-0" 
+            onClick={() => setIsCatalogOpen(false)} 
+          />
+
+          <div className="relative z-10 bg-white dark:bg-[#1E1E1C] max-h-[85vh] rounded-t-[36px] border-t border-[#E0E0D8] dark:border-[#383832] shadow-2xl flex flex-col overflow-hidden animate-slide-up">
+            {/* Drawer Header */}
+            <div className="p-6 border-b border-[#E0E0D8] dark:border-[#383832] flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-[#5A5A40] text-white flex items-center justify-center font-bold">
+                  <Grid className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-serif text-lg font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">
+                    Semua Menu & Fitur Sekolah
+                  </h3>
+                  <p className="text-xs text-[#8E8E85]">
+                    Pilih menu navigasi yang ingin Anda buka
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsCatalogOpen(false)}
+                className="p-2 text-[#8E8E85] hover:text-[#2D2D2A] dark:hover:text-white rounded-full bg-[#F5F5F0] dark:bg-[#282825] cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Category Filter Pills */}
+            <div className="px-6 py-3 bg-[#F8F8F5] dark:bg-[#282825] border-b border-[#E0E0D8]/60 dark:border-[#383832]/60 flex items-center gap-2 overflow-x-auto">
+              {['Semua', 'Google Workspace', 'Utama & Akademik', 'Kesiswaan & Prestasi', 'Layanan Sekolah', 'Kenangan & Arsip'].map(cat => (
+                <button
+                  key={cat}
+                  onClick={() => setSelectedCatalogCategory(cat)}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
+                    selectedCatalogCategory === cat
+                      ? 'bg-[#5A5A40] text-white shadow-xs'
+                      : 'bg-white dark:bg-[#1E1E1C] text-[#8E8E85] border border-[#E0E0D8] dark:border-[#383832]'
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+
+            {/* Catalog Grid */}
+            <div className="p-6 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5 max-h-[60vh]">
+              {filteredCatalog.map(item => {
+                const Icon = item.icon;
+                const isActive = currentView === item.id;
+
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => handleNavClick(item.id)}
+                    className={`flex items-start gap-3.5 p-4 rounded-2xl border text-left transition-all cursor-pointer group ${
+                      isActive
+                        ? 'bg-[#5A5A40]/10 dark:bg-[#5A5A40]/30 border-[#5A5A40] text-[#5A5A40] dark:text-[#EAEAE2] ring-2 ring-[#5A5A40]/20'
+                        : 'bg-white dark:bg-[#242421] border-[#E0E0D8] dark:border-[#383832] hover:border-[#5A5A40] hover:bg-[#F8F8F5] dark:hover:bg-[#2A2A26]'
+                    }`}
+                  >
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
+                      isActive
+                        ? 'bg-[#5A5A40] text-white'
+                        : 'bg-[#F5F5F0] dark:bg-[#2E2E2A] text-[#5A5A40] dark:text-[#C5C5B0] group-hover:bg-[#5A5A40] group-hover:text-white'
+                    }`}>
+                      <Icon className="w-5 h-5" />
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-1">
+                        <h4 className="font-serif text-xs sm:text-sm font-bold text-[#2D2D2A] dark:text-[#F0F0EA] truncate">
+                          {item.label}
+                        </h4>
+                        {item.badge && item.badge > 0 && (
+                          <span className="px-1.5 py-0.2 bg-[#8C4A32] text-white text-[9px] font-bold rounded-full">
+                            {item.badge}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-[#8E8E85] dark:text-[#A4A49B] line-clamp-1 mt-0.5">
+                        {item.subtitle}
+                      </p>
+                    </div>
+
+                    <ChevronRight className="w-4 h-4 text-[#8E8E85] opacity-40 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all self-center shrink-0" />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Main Bottom Sticky Bar */}
+      <nav
+        id="bottom-navigation-bar"
+        aria-label="Navigasi Menu Bawah"
+        className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-[#1E1E1C]/95 backdrop-blur-lg border-t border-[#E0E0D8] dark:border-[#383832] shadow-[0_-4px_20px_rgba(0,0,0,0.08)] dark:shadow-[0_-4px_20px_rgba(0,0,0,0.5)] safe-bottom transition-colors duration-200"
+      >
+        <div className="max-w-4xl mx-auto px-1 sm:px-4">
+          <div className="flex justify-around items-center h-18 sm:h-20 gap-0.5 sm:gap-1">
+            {quickNavItems.map(item => {
+              const Icon = item.icon;
+              const isActive = currentView === item.id;
+
+              return (
+                <button
+                  key={item.id}
+                  id={`btn-nav-${item.id}`}
+                  onClick={() => handleNavClick(item.id)}
+                  className={`relative flex flex-col items-center justify-center py-1 transition-all duration-200 group cursor-pointer flex-1 min-w-0 ${
+                    isActive
+                      ? item.highlight ? 'text-[#8C4A32] dark:text-[#E07A5F]' : 'text-[#5A5A40] dark:text-[#EAEAE2]'
+                      : item.highlight ? 'text-[#8C4A32]/80 dark:text-[#E07A5F]/80 hover:text-[#8C4A32]' : 'text-[#8E8E85] dark:text-[#9E9E94] hover:text-[#5A5A40] dark:hover:text-[#EAEAE2]'
+                  }`}
+                >
+                  {/* Icon Container */}
+                  <div
+                    className={`relative w-8 h-8 sm:w-10 sm:h-10 rounded-2xl flex items-center justify-center transition-all ${
+                      isActive
+                        ? item.highlight
+                          ? 'bg-[#8C4A32] text-white shadow-md'
+                          : 'bg-[#5A5A40] dark:bg-[#727252] text-white shadow-md'
+                        : item.highlight
+                          ? 'bg-[#8C4A32]/10 dark:bg-[#8C4A32]/30 text-[#8C4A32] dark:text-[#E07A5F] group-hover:bg-[#8C4A32]/20'
+                          : 'bg-[#F5F5F0] dark:bg-[#282825] text-[#5A5A40] dark:text-[#C5C5B0] group-hover:bg-[#E0E0D8] dark:group-hover:bg-[#383832]'
+                    }`}
+                  >
+                    <Icon className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+                    
+                    {/* Badge */}
+                    {item.badge && item.badge > 0 && item.id === 'announcements' && (
+                      <span className="absolute -top-1 -right-1 px-1.5 py-0.2 text-[8px] sm:text-[9px] font-bold bg-[#8C4A32] text-white rounded-full border-2 border-white dark:border-[#1E1E1C] shadow-sm">
+                        {item.badge}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Nav Label */}
+                  <span
+                    className={`text-[8px] sm:text-[9px] font-bold uppercase tracking-tighter sm:tracking-wider mt-0.5 sm:mt-1 truncate max-w-full transition-colors ${
+                      isActive
+                        ? item.highlight ? 'text-[#8C4A32] dark:text-[#E07A5F]' : 'text-[#5A5A40] dark:text-[#EAEAE2]'
+                        : item.highlight ? 'text-[#8C4A32] dark:text-[#E07A5F]' : 'text-[#8E8E85] dark:text-[#9E9E94] group-hover:text-[#5A5A40] dark:group-hover:text-[#EAEAE2]'
+                    }`}
+                  >
+                    {item.label}
+                  </span>
+
+                  {/* Active Indicator */}
+                  <div className={`w-3 sm:w-4 h-0.5 rounded-full mt-0.5 transition-all ${
+                    isActive
+                      ? item.highlight ? 'bg-[#8C4A32] dark:bg-[#E07A5F]' : 'bg-[#5A5A40] dark:bg-[#C5C5B0]'
+                      : 'bg-transparent'
+                  }`} />
+                </button>
+              );
+            })}
+
+            {/* "Semua Menu" Button to Open All 19 Menus */}
+            <button
+              id="btn-nav-all-menus"
+              onClick={() => setIsCatalogOpen(!isCatalogOpen)}
+              className={`relative flex flex-col items-center justify-center py-1 transition-all duration-200 group cursor-pointer flex-1 min-w-0 ${
+                isCatalogOpen ? 'text-[#5A5A40] dark:text-[#EAEAE2]' : 'text-[#8E8E85] dark:text-[#9E9E94] hover:text-[#5A5A40]'
+              }`}
+            >
+              <div className={`relative w-8 h-8 sm:w-10 sm:h-10 rounded-2xl flex items-center justify-center transition-all ${
+                isCatalogOpen
+                  ? 'bg-[#5A5A40] text-white shadow-md'
+                  : 'bg-amber-100 dark:bg-amber-950/50 text-amber-900 dark:text-amber-200 group-hover:bg-amber-200'
+              }`}>
+                <Grid className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+              </div>
+
+              <span className="text-[8px] sm:text-[9px] font-bold uppercase tracking-tighter sm:tracking-wider mt-0.5 sm:mt-1 truncate max-w-full">
+                SEMUA
+              </span>
+
+              <div className={`w-3 sm:w-4 h-0.5 rounded-full mt-0.5 transition-all ${
+                isCatalogOpen ? 'bg-[#5A5A40] dark:bg-[#C5C5B0]' : 'bg-transparent'
+              }`} />
+            </button>
+          </div>
+        </div>
+      </nav>
+    </>
+  );
+};

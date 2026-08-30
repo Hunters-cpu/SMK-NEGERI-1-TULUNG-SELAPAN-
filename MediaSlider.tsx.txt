@@ -1,0 +1,469 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { useApp } from '../context/AppContext';
+import { SliderItem } from '../types';
+import { SocialActions } from './SocialActions';
+import { 
+  ChevronLeft, 
+  ChevronRight, 
+  Play, 
+  Pause, 
+  Volume2, 
+  VolumeX, 
+  Calendar, 
+  Plus, 
+  Trash2, 
+  Edit3, 
+  Video as VideoIcon, 
+  Image as ImageIcon,
+  Sparkles,
+  X
+} from 'lucide-react';
+
+export const MediaSlider: React.FC = () => {
+  const { 
+    sliderItems, 
+    authSession, 
+    addSliderItem, 
+    updateSliderItem, 
+    deleteSliderItem, 
+    toggleSliderItemLike,
+    addSliderItemComment,
+    incrementSliderItemShare,
+    requestDeleteConfirm 
+  } = useApp();
+
+  const [currentIndex, setCurrentIndex] = useState<number>(0);
+  const [isPlaying, setIsPlaying] = useState<boolean>(true);
+  const [isMuted, setIsMuted] = useState<boolean>(true);
+  const [isManageModalOpen, setIsManageModalOpen] = useState<boolean>(false);
+  const [editingSlide, setEditingSlide] = useState<SliderItem | null>(null);
+  const [newSlideForm, setNewSlideForm] = useState({
+    title: '',
+    date: new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date()),
+    type: 'image' as 'image' | 'video',
+    url: '',
+    description: ''
+  });
+
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const timerRef = useRef<number | null>(null);
+
+  const currentSlide = sliderItems[currentIndex] || sliderItems[0];
+
+  // Auto rotation effect
+  useEffect(() => {
+    if (!isPlaying || sliderItems.length <= 1) return;
+
+    // Give videos more time or 7s for images
+    const duration = currentSlide?.type === 'video' ? 9000 : 6000;
+
+    timerRef.current = window.setTimeout(() => {
+      handleNext();
+    }, duration);
+
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [currentIndex, isPlaying, sliderItems.length, currentSlide?.type]);
+
+  const handleNext = () => {
+    setCurrentIndex(prev => (prev + 1) % sliderItems.length);
+  };
+
+  const handlePrev = () => {
+    setCurrentIndex(prev => (prev - 1 + sliderItems.length) % sliderItems.length);
+  };
+
+  const handleSaveSlide = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newSlideForm.title.trim() || !newSlideForm.url.trim()) return;
+
+    if (editingSlide) {
+      updateSliderItem(editingSlide.id, newSlideForm);
+      setEditingSlide(null);
+    } else {
+      addSliderItem({
+        title: newSlideForm.title.trim(),
+        date: newSlideForm.date.trim(),
+        type: newSlideForm.type,
+        url: newSlideForm.url.trim(),
+        description: newSlideForm.description.trim()
+      });
+    }
+
+    setNewSlideForm({
+      title: '',
+      date: new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date()),
+      type: 'image',
+      url: '',
+      description: ''
+    });
+  };
+
+  if (!sliderItems || sliderItems.length === 0) {
+    return (
+      <div className="w-full h-80 bg-slate-800 rounded-3xl flex items-center justify-center text-slate-400">
+        Belum ada dokumentasi kegiatan di slider.
+      </div>
+    );
+  }
+
+  return (
+    <section className="relative w-full rounded-[32px] overflow-hidden shadow-xl bg-white border-4 border-white group">
+      {/* Slider Viewport */}
+      <div className="relative aspect-[16/9] sm:aspect-[21/9] w-full overflow-hidden bg-neutral-900 rounded-[28px]">
+        
+        {/* Media Renderer */}
+        {currentSlide.type === 'video' ? (
+          <div className="relative w-full h-full">
+            <video
+              key={currentSlide.url}
+              ref={videoRef}
+              src={currentSlide.url}
+              autoPlay
+              muted={isMuted}
+              loop
+              playsInline
+              className="w-full h-full object-cover"
+            />
+            {/* Live Video Tag */}
+            <div className="absolute top-4 sm:top-6 left-4 sm:left-6 z-20 flex items-center gap-2 px-3.5 py-1 bg-[#8C4A32] text-white text-[10px] sm:text-xs font-bold uppercase tracking-widest rounded-full shadow-lg backdrop-blur-sm animate-pulse">
+              <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+              <VideoIcon className="w-3.5 h-3.5" />
+              <span>Video Otomatis Berputar</span>
+            </div>
+          </div>
+        ) : (
+          <img
+            key={currentSlide.url}
+            src={currentSlide.url}
+            alt={currentSlide.title}
+            className="w-full h-full object-cover transition-transform duration-700 hover:scale-105"
+            loading="eager"
+          />
+        )}
+
+        {/* Ambient Dark Gradient Overlay */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-transparent pointer-events-none" />
+
+        {/* Bottom Caption Information */}
+        <div className="absolute bottom-0 left-0 right-0 p-5 sm:p-8 z-20 flex flex-col justify-end pointer-events-auto">
+          <div className="max-w-3xl space-y-2">
+            <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/20 backdrop-blur-md border border-white/30 text-white text-xs font-medium uppercase tracking-wider rounded-full shadow-sm">
+              <Calendar className="w-3.5 h-3.5 text-white" />
+              <span>{currentSlide.date}</span>
+            </div>
+            <h2 className="font-serif text-xl sm:text-3xl md:text-4xl font-bold text-white tracking-tight drop-shadow-md line-clamp-2">
+              {currentSlide.title}
+            </h2>
+            {currentSlide.description && (
+              <p className="text-xs sm:text-sm text-white/90 line-clamp-2 hidden sm:block drop-shadow max-w-2xl font-normal">
+                {currentSlide.description}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Slider Controls Top Right */}
+        <div className="absolute top-4 sm:top-6 right-4 sm:right-6 z-20 flex items-center gap-2">
+          {/* Sound Toggle for Video */}
+          {currentSlide.type === 'video' && (
+            <button
+              id="btn-slider-mute"
+              type="button"
+              onClick={() => setIsMuted(!isMuted)}
+              className="p-2.5 rounded-full bg-white/25 hover:bg-white/40 text-white backdrop-blur-md border border-white/30 shadow-lg transition-all cursor-pointer"
+              title={isMuted ? 'Nyalakan Suara Video' : 'Bisukan Suara Video'}
+            >
+              {isMuted ? <VolumeX className="w-4 h-4 text-white" /> : <Volume2 className="w-4 h-4 text-white" />}
+            </button>
+          )}
+
+          {/* Play / Pause Toggle */}
+          <button
+            id="btn-slider-pause"
+            type="button"
+            onClick={() => setIsPlaying(!isPlaying)}
+            className="p-2.5 rounded-full bg-white/25 hover:bg-white/40 text-white backdrop-blur-md border border-white/30 shadow-lg transition-all cursor-pointer"
+            title={isPlaying ? 'Jeda Slider' : 'Putar Slider'}
+          >
+            {isPlaying ? <Pause className="w-4 h-4 text-white" /> : <Play className="w-4 h-4 text-white" />}
+          </button>
+
+          {/* Admin Slider Management Trigger */}
+          {authSession.role === 'super_admin' && (
+            <button
+              id="btn-manage-slider"
+              type="button"
+              onClick={() => setIsManageModalOpen(true)}
+              className="px-3.5 py-2 rounded-xl bg-[#5A5A40] hover:bg-[#484833] text-white text-xs font-bold uppercase tracking-wider shadow-lg backdrop-blur-sm flex items-center gap-1.5 cursor-pointer"
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Kelola Slider</span>
+            </button>
+          )}
+        </div>
+
+        {/* Manual Prev / Next Arrow Navigation */}
+        <button
+          id="btn-slider-prev"
+          type="button"
+          onClick={handlePrev}
+          className="absolute left-3 sm:left-6 top-1/2 -translate-y-1/2 z-20 w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white/25 hover:bg-white/45 text-white backdrop-blur-md border border-white/30 shadow-xl flex items-center justify-center transition-all cursor-pointer"
+          aria-label="Slide sebelumnya"
+        >
+          <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
+        </button>
+
+        <button
+          id="btn-slider-next"
+          type="button"
+          onClick={handleNext}
+          className="absolute right-3 sm:right-6 top-1/2 -translate-y-1/2 z-20 w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-white/25 hover:bg-white/45 text-white backdrop-blur-md border border-white/30 shadow-xl flex items-center justify-center transition-all cursor-pointer"
+          aria-label="Slide berikutnya"
+        >
+          <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" />
+        </button>
+
+        {/* Slide Indicators Dots */}
+        <div className="absolute bottom-4 right-5 sm:right-8 z-20 flex items-center gap-1.5">
+          {sliderItems.map((slide, idx) => (
+            <button
+              key={slide.id}
+              onClick={() => setCurrentIndex(idx)}
+              className={`h-2 rounded-full transition-all cursor-pointer ${
+                idx === currentIndex ? 'w-6 bg-white shadow-md' : 'w-2 bg-white/40 hover:bg-white/70'
+              }`}
+              aria-label={`Buka slide ${idx + 1}`}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Social Interactions for Active Slide (Home Slider: Like, Comment, Share) */}
+      <div className="px-5 sm:px-8 py-3 bg-white">
+        <SocialActions
+          itemId={currentSlide.id}
+          itemTitle={currentSlide.title}
+          likes={currentSlide.likes || 0}
+          likedBy={currentSlide.likedBy || []}
+          comments={currentSlide.comments || []}
+          shares={currentSlide.shares || 0}
+          onToggleLike={() => toggleSliderItemLike(currentSlide.id)}
+          onAddComment={(content, author) => addSliderItemComment(currentSlide.id, content, author)}
+          onShare={() => incrementSliderItemShare(currentSlide.id)}
+        />
+      </div>
+
+      {/* Admin Slider Management Modal */}
+      {isManageModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="relative w-full max-w-2xl bg-white border border-[#E0E0D8] rounded-3xl shadow-2xl p-6 sm:p-8 max-h-[90vh] overflow-y-auto text-[#2D2D2A]">
+            <div className="flex items-center justify-between pb-4 border-b border-[#E0E0D8] mb-5">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 rounded-2xl bg-[#5A5A40] text-white">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-[#8E8E85]">Pengaturan Konten</span>
+                  <h3 className="font-serif text-lg font-bold text-[#5A5A40]">Kelola Slider Foto & Video Beranda</h3>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setIsManageModalOpen(false);
+                  setEditingSlide(null);
+                }}
+                className="text-[#8E8E85] hover:text-[#2D2D2A] p-1.5 rounded-xl hover:bg-[#F5F5F0]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Add / Edit Form */}
+            <form onSubmit={handleSaveSlide} className="space-y-4 bg-[#F5F5F0] p-5 rounded-2xl border border-[#E0E0D8] mb-6">
+              <h4 className="font-serif text-sm font-bold text-[#5A5A40]">
+                {editingSlide ? 'Edit Media Slider' : 'Tambah Media Slider Baru'}
+              </h4>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Judul Kegiatan *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newSlideForm.title}
+                    onChange={e => setNewSlideForm({ ...newSlideForm, title: e.target.value })}
+                    placeholder="Contoh: Pentas Seni Sekolah 2024"
+                    className="w-full px-3.5 py-2 text-sm bg-white border border-[#E0E0D8] rounded-xl text-[#2D2D2A] focus:outline-none focus:border-[#5A5A40]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Tanggal Pelaksanaan *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newSlideForm.date}
+                    onChange={e => setNewSlideForm({ ...newSlideForm, date: e.target.value })}
+                    placeholder="Contoh: 17 Agustus 2024"
+                    className="w-full px-3.5 py-2 text-sm bg-white border border-[#E0E0D8] rounded-xl text-[#2D2D2A] focus:outline-none focus:border-[#5A5A40]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Tipe Media *</label>
+                  <select
+                    value={newSlideForm.type}
+                    onChange={e => setNewSlideForm({ ...newSlideForm, type: e.target.value as 'image' | 'video' })}
+                    className="w-full px-3.5 py-2 text-sm bg-white border border-[#E0E0D8] rounded-xl text-[#2D2D2A] focus:outline-none focus:border-[#5A5A40]"
+                  >
+                    <option value="image">📸 Foto / Gambar</option>
+                    <option value="video">🎥 Video (Otomatis Berputar)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] mb-1">URL Media / Video MP4 *</label>
+                  <input
+                    type="url"
+                    required
+                    value={newSlideForm.url}
+                    onChange={e => setNewSlideForm({ ...newSlideForm, url: e.target.value })}
+                    placeholder="https://... atau upload file"
+                    className="w-full px-3.5 py-2 text-sm bg-white border border-[#E0E0D8] rounded-xl text-[#2D2D2A] focus:outline-none focus:border-[#5A5A40]"
+                  />
+                </div>
+              </div>
+
+              {/* Local File Upload helper */}
+              <div className="text-xs text-[#8E8E85]">
+                <span className="font-semibold text-[#2D2D2A]">Atau Unggah Langsung: </span>
+                <input
+                  type="file"
+                  accept={newSlideForm.type === 'video' ? 'video/mp4,video/webm' : 'image/*'}
+                  onChange={e => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onload = () => {
+                        setNewSlideForm(prev => ({ ...prev, url: reader.result as string }));
+                      };
+                      reader.readAsDataURL(file);
+                    }
+                  }}
+                  className="text-xs text-[#5A5A40] file:mr-2 file:py-1 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-[#5A5A40] file:text-white hover:file:bg-[#484833] cursor-pointer"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Deskripsi Singkat</label>
+                <textarea
+                  rows={2}
+                  value={newSlideForm.description}
+                  onChange={e => setNewSlideForm({ ...newSlideForm, description: e.target.value })}
+                  placeholder="Keterangan singkat tentang dokumentasi ini..."
+                  className="w-full px-3.5 py-2 text-sm bg-white border border-[#E0E0D8] rounded-xl text-[#2D2D2A] focus:outline-none focus:border-[#5A5A40]"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                {editingSlide && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingSlide(null);
+                      setNewSlideForm({
+                        title: '',
+                        date: new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date()),
+                        type: 'image',
+                        url: '',
+                        description: ''
+                      });
+                    }}
+                    className="px-4 py-2 text-xs font-bold bg-[#E0E0D8] text-[#2D2D2A] rounded-xl hover:bg-[#D0D0C8]"
+                  >
+                    Batal Edit
+                  </button>
+                )}
+                <button
+                  type="submit"
+                  className="px-5 py-2 text-xs font-bold uppercase tracking-wider bg-[#5A5A40] hover:bg-[#484833] text-white rounded-xl flex items-center gap-1.5 shadow-sm cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>{editingSlide ? 'Simpan Perubahan' : 'Tambahkan ke Slider'}</span>
+                </button>
+              </div>
+            </form>
+
+            {/* List of existing slides */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-bold uppercase tracking-widest text-[#8E8E85]">
+                Daftar Media Aktif ({sliderItems.length})
+              </h4>
+              <div className="divide-y divide-[#E0E0D8]">
+                {sliderItems.map((slide) => (
+                  <div key={slide.id} className="py-3 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-16 h-11 rounded-xl overflow-hidden bg-[#F5F5F0] flex-shrink-0 border border-[#E0E0D8]">
+                        {slide.type === 'video' ? (
+                          <div className="w-full h-full bg-[#5A5A40] flex items-center justify-center text-white">
+                            <VideoIcon className="w-5 h-5" />
+                          </div>
+                        ) : (
+                          <img src={slide.url} alt="" className="w-full h-full object-cover" />
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-serif text-sm font-bold text-[#2D2D2A] line-clamp-1">{slide.title}</p>
+                        <p className="text-xs text-[#8E8E85]">
+                          {slide.type === 'video' ? '🎥 Video' : '📸 Foto'} • {slide.date}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingSlide(slide);
+                          setNewSlideForm({
+                            title: slide.title,
+                            date: slide.date,
+                            type: slide.type,
+                            url: slide.url,
+                            description: slide.description || ''
+                          });
+                        }}
+                        className="p-2 rounded-xl bg-[#F5F5F0] hover:bg-[#E0E0D8] text-[#5A5A40]"
+                        title="Edit Slide"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          requestDeleteConfirm({
+                            itemName: slide.title,
+                            message: 'Yakin ingin menghapus media ini dari slider? Tindakan ini tidak bisa dibatalkan.',
+                            onConfirm: () => deleteSliderItem(slide.id)
+                          });
+                        }}
+                        className="p-2 rounded-xl bg-[#8C4A32]/10 hover:bg-[#8C4A32]/20 text-[#8C4A32]"
+                        title="Hapus Slide"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+};

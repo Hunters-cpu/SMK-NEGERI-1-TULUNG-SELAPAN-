@@ -1,0 +1,1810 @@
+import React, { useState } from 'react';
+import { useApp } from '../context/AppContext';
+import { ClassRoom, Student, ClassMemoryPhoto, PerangkatKelas, ClassScheduleItem } from '../types';
+import { MediaUploadField } from '../components/MediaUploadField';
+import { MultiMediaUploadField, MultiMediaItem } from '../components/MultiMediaUploadField';
+import { ScrollEmboss } from '../components/ScrollEmboss';
+import { SocialActions } from '../components/SocialActions';
+import { TikTokIcon } from '../components/TikTokIcon';
+import { QRCodeModal } from '../components/QRCodeModal';
+import { 
+  School, 
+  Users, 
+  Camera, 
+  Award, 
+  KeyRound, 
+  UserCheck, 
+  ShieldCheck, 
+  ArrowLeft, 
+  Plus, 
+  Edit3, 
+  Trash2, 
+  Search, 
+  CheckCircle2, 
+  AlertCircle, 
+  Lock, 
+  User, 
+  Phone, 
+  Instagram, 
+  Sparkles, 
+  RefreshCw, 
+  Calendar, 
+  X, 
+  Eye, 
+  Save,
+  GraduationCap,
+  ExternalLink,
+  BookOpen,
+  Clock,
+  QrCode
+} from 'lucide-react';
+
+interface ClassDetailViewProps {
+  classRoom: ClassRoom;
+  onBack: () => void;
+}
+
+type ClassSubTab = 'gallery' | 'officers' | 'students' | 'schedules' | 'student_auth';
+
+export const ClassDetailView: React.FC<ClassDetailViewProps> = ({ classRoom, onBack }) => {
+  const { 
+    authSession, 
+    students, 
+    updateClass,
+    addClassPhoto, 
+    addClassPhotosBatch,
+    deleteClassPhoto, 
+    toggleClassPhotoPrivacy,
+    toggleClassPhotoLike,
+    addClassPhotoComment,
+    incrementClassPhotoShare,
+    updateClassPerangkat, 
+    addStudent, 
+    updateStudent, 
+    deleteStudent, 
+    updateStudentSelf,
+    loginStudent,
+    logout,
+    resetStudentSession,
+    requestDeleteConfirm,
+    deviceId,
+    classSchedules,
+    addClassSchedule,
+    updateClassSchedule,
+    deleteClassSchedule,
+    showToast
+  } = useApp();
+
+  const [activeTab, setActiveTab] = useState<ClassSubTab>('gallery');
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [lightboxPhoto, setLightboxPhoto] = useState<ClassMemoryPhoto | null>(null);
+  const [isQrModalOpen, setIsQrModalOpen] = useState<boolean>(false);
+
+  // TikTok Edit State (for Super Admin & Class Admin)
+  const [isEditingTikTok, setIsEditingTikTok] = useState<boolean>(false);
+  const [tiktokInput, setTiktokInput] = useState<string>(classRoom.tiktokUrl || '');
+
+  // Check if current user is authorized to manage this class
+  const isSuperAdmin = authSession.role === 'super_admin';
+  const isThisClassAdmin = authSession.role === 'class_admin' && authSession.classId === classRoom.id;
+  const canManageClass = isSuperAdmin || isThisClassAdmin;
+
+  // Class Students & Stats
+  const classStudents = students.filter(s => s.classId === classRoom.id);
+  const totalStudents = classStudents.length;
+  const maleCount = classStudents.filter(s => s.gender === 'L').length;
+  const femaleCount = classStudents.filter(s => s.gender === 'P').length;
+
+  const filteredStudents = classStudents.filter(s =>
+    s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    s.nisn.includes(searchTerm)
+  );
+
+  // Is logged in as a student belonging to this class?
+  const currentStudentUser =
+    authSession.role === 'student' && authSession.studentId
+      ? students.find(s => s.id === authSession.studentId)
+      : null;
+
+  // State for Add Photo Modal & Multi-Media Upload
+  const [isPhotoModalOpen, setIsPhotoModalOpen] = useState<boolean>(false);
+  const [multiMediaList, setMultiMediaList] = useState<MultiMediaItem[]>([]);
+  const [photoForm, setPhotoForm] = useState({
+    title: '',
+    date: new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date()),
+    imageUrl: '',
+    description: ''
+  });
+
+  // State for Edit Perangkat
+  const [isEditingPerangkat, setIsEditingPerangkat] = useState<boolean>(false);
+  const [perangkatForm, setPerangkatForm] = useState<PerangkatKelas>({ ...classRoom.perangkat });
+
+  // State for Add/Edit Student Modal
+  const [isStudentModalOpen, setIsStudentModalOpen] = useState<boolean>(false);
+  const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+  const [studentForm, setStudentForm] = useState({
+    nisn: '',
+    name: '',
+    gender: 'L' as 'L' | 'P',
+    photoUrl: '',
+    quote: '',
+    citaCita: '',
+    pesanKesan: '',
+    instagram: '',
+    phone: '',
+    passwordHash: '123456'
+  });
+
+  // State for Student In-Class Login Form
+  const [inClassLoginStudentId, setInClassLoginStudentId] = useState<string>('');
+  const [inClassLoginPassword, setInClassLoginPassword] = useState<string>('');
+  const [inClassLoginError, setInClassLoginError] = useState<string>('');
+
+  // State for Student Self Profile Editor
+  const [selfProfileForm, setSelfProfileForm] = useState({
+    quote: currentStudentUser?.quote || '',
+    citaCita: currentStudentUser?.citaCita || '',
+    pesanKesan: currentStudentUser?.pesanKesan || '',
+    instagram: currentStudentUser?.instagram || '',
+    phone: currentStudentUser?.phone || '',
+    photoUrl: currentStudentUser?.photoUrl || '',
+    newPassword: ''
+  });
+
+  // Handlers
+  const handleSavePhoto = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const uploaderName = isSuperAdmin ? 'Admin Utama' : `Admin Kelas ${classRoom.name}`;
+
+    // If multi-media items are selected
+    if (multiMediaList.length > 0) {
+      const itemsToUpload = multiMediaList.map(item => ({
+        title: item.title?.trim() || photoForm.title.trim() || 'Foto Kenangan Kelas',
+        date: photoForm.date.trim(),
+        imageUrl: item.url,
+        description: photoForm.description.trim() || undefined,
+        uploadedBy: uploaderName
+      }));
+
+      addClassPhotosBatch(classRoom.id, itemsToUpload);
+      setMultiMediaList([]);
+      setPhotoForm({
+        title: '',
+        date: new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date()),
+        imageUrl: '',
+        description: ''
+      });
+      setIsPhotoModalOpen(false);
+      return;
+    }
+
+    // Single item fallback
+    if (!photoForm.title.trim() || !photoForm.imageUrl.trim()) return;
+
+    addClassPhoto(classRoom.id, {
+      title: photoForm.title.trim(),
+      date: photoForm.date.trim(),
+      imageUrl: photoForm.imageUrl.trim(),
+      description: photoForm.description.trim() || undefined,
+      uploadedBy: uploaderName
+    });
+    setPhotoForm({
+      title: '',
+      date: new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date()),
+      imageUrl: '',
+      description: ''
+    });
+    setIsPhotoModalOpen(false);
+  };
+
+  const handleSavePerangkat = (e: React.FormEvent) => {
+    e.preventDefault();
+    updateClassPerangkat(classRoom.id, perangkatForm);
+    setIsEditingPerangkat(false);
+  };
+
+  const handleOpenAddStudent = () => {
+    setEditingStudent(null);
+    setStudentForm({
+      nisn: `006${Math.floor(1000000 + Math.random() * 9000000)}`,
+      name: '',
+      gender: 'L',
+      photoUrl: '',
+      quote: '',
+      citaCita: '',
+      pesanKesan: '',
+      instagram: '',
+      phone: '',
+      passwordHash: '123456'
+    });
+    setIsStudentModalOpen(true);
+  };
+
+  const handleOpenEditStudent = (std: Student) => {
+    setEditingStudent(std);
+    setStudentForm({
+      nisn: std.nisn,
+      name: std.name,
+      gender: std.gender,
+      photoUrl: std.photoUrl || '',
+      quote: std.quote || '',
+      citaCita: std.citaCita || '',
+      pesanKesan: std.pesanKesan || '',
+      instagram: std.instagram || '',
+      phone: std.phone || '',
+      passwordHash: std.passwordHash || '123456'
+    });
+    setIsStudentModalOpen(true);
+  };
+
+  const handleSaveStudent = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!studentForm.name.trim()) return;
+
+    if (editingStudent) {
+      updateStudent(editingStudent.id, {
+        nisn: studentForm.nisn.trim(),
+        name: studentForm.name.trim(),
+        gender: studentForm.gender,
+        photoUrl: studentForm.photoUrl.trim() || undefined,
+        quote: studentForm.quote.trim() || undefined,
+        citaCita: studentForm.citaCita.trim() || undefined,
+        pesanKesan: studentForm.pesanKesan.trim() || undefined,
+        instagram: studentForm.instagram.trim() || undefined,
+        phone: studentForm.phone.trim() || undefined,
+        passwordHash: studentForm.passwordHash.trim() || '123456'
+      });
+    } else {
+      addStudent({
+        nisn: studentForm.nisn.trim() || `006${Date.now().toString().slice(-7)}`,
+        name: studentForm.name.trim(),
+        gender: studentForm.gender,
+        photoUrl: studentForm.photoUrl.trim() || undefined,
+        quote: studentForm.quote.trim() || undefined,
+        citaCita: studentForm.citaCita.trim() || undefined,
+        pesanKesan: studentForm.pesanKesan.trim() || undefined,
+        instagram: studentForm.instagram.trim() || undefined,
+        phone: studentForm.phone.trim() || undefined,
+        classId: classRoom.id,
+        passwordHash: studentForm.passwordHash.trim() || '123456'
+      });
+    }
+    setIsStudentModalOpen(false);
+  };
+
+  const handleInClassLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    setInClassLoginError('');
+
+    if (!inClassLoginStudentId) {
+      setInClassLoginError('Silakan pilih nama Anda terlebih dahulu.');
+      return;
+    }
+    if (!inClassLoginPassword) {
+      setInClassLoginError('Silakan masukkan kata sandi Anda.');
+      return;
+    }
+
+    const res = loginStudent(inClassLoginStudentId, inClassLoginPassword);
+    if (!res.success && res.message) {
+      setInClassLoginError(res.message);
+    }
+  };
+
+  const handleSaveSelfProfile = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentStudentUser) return;
+
+    updateStudentSelf(currentStudentUser.id, {
+      quote: selfProfileForm.quote,
+      citaCita: selfProfileForm.citaCita,
+      pesanKesan: selfProfileForm.pesanKesan,
+      instagram: selfProfileForm.instagram,
+      phone: selfProfileForm.phone,
+      photoUrl: selfProfileForm.photoUrl || undefined,
+      newPassword: selfProfileForm.newPassword ? selfProfileForm.newPassword : undefined
+    });
+  };
+
+  const handleSaveTikTok = (e: React.FormEvent) => {
+    e.preventDefault();
+    updateClass(classRoom.id, {
+      tiktokUrl: tiktokInput.trim() || undefined
+    });
+    setIsEditingTikTok(false);
+  };
+
+  // Schedules for this class (Syncs automatically with ClassSchedulesView)
+  const [selectedScheduleDay, setSelectedScheduleDay] = useState<string>('Semua');
+  const [isScheduleModalOpen, setIsScheduleModalOpen] = useState<boolean>(false);
+  const [editingSchedule, setEditingSchedule] = useState<ClassScheduleItem | null>(null);
+  const [scheduleForm, setScheduleForm] = useState({
+    day: 'Senin' as ClassScheduleItem['day'],
+    timeSlot: '07:30 - 09:00',
+    subject: '',
+    teacherName: '',
+    room: classRoom.name
+  });
+
+  const thisClassSchedules = classSchedules.filter(s => s.classId === classRoom.id);
+  const filteredClassSchedules = thisClassSchedules.filter(item => 
+    selectedScheduleDay === 'Semua' || item.day === selectedScheduleDay
+  );
+
+  const daysOrder: Record<string, number> = {
+    'Senin': 1, 'Selasa': 2, 'Rabu': 3, 'Kamis': 4, 'Jumat': 5, 'Sabtu': 6
+  };
+
+  const sortedClassSchedules = [...filteredClassSchedules].sort((a, b) => {
+    const dayDiff = (daysOrder[a.day] || 99) - (daysOrder[b.day] || 99);
+    if (dayDiff !== 0) return dayDiff;
+    return a.timeSlot.localeCompare(b.timeSlot);
+  });
+
+  const handleOpenAddSchedule = () => {
+    setEditingSchedule(null);
+    setScheduleForm({
+      day: selectedScheduleDay !== 'Semua' ? (selectedScheduleDay as any) : 'Senin',
+      timeSlot: '07:30 - 09:00',
+      subject: '',
+      teacherName: '',
+      room: classRoom.name
+    });
+    setIsScheduleModalOpen(true);
+  };
+
+  const handleOpenEditSchedule = (item: ClassScheduleItem) => {
+    setEditingSchedule(item);
+    setScheduleForm({
+      day: item.day,
+      timeSlot: item.timeSlot,
+      subject: item.subject,
+      teacherName: item.teacherName,
+      room: item.room || classRoom.name
+    });
+    setIsScheduleModalOpen(true);
+  };
+
+  const handleSaveSchedule = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!scheduleForm.subject.trim() || !scheduleForm.teacherName.trim()) {
+      showToast('Silakan isi nama mata pelajaran dan nama guru pengajar.', 'warning');
+      return;
+    }
+
+    if (editingSchedule) {
+      updateClassSchedule(editingSchedule.id, {
+        day: scheduleForm.day,
+        timeSlot: scheduleForm.timeSlot.trim(),
+        subject: scheduleForm.subject.trim(),
+        teacherName: scheduleForm.teacherName.trim(),
+        room: scheduleForm.room.trim() || classRoom.name
+      });
+      showToast(`Mata pelajaran "${scheduleForm.subject}" berhasil diperbarui!`, 'success');
+    } else {
+      addClassSchedule({
+        classId: classRoom.id,
+        day: scheduleForm.day,
+        timeSlot: scheduleForm.timeSlot.trim(),
+        subject: scheduleForm.subject.trim(),
+        teacherName: scheduleForm.teacherName.trim(),
+        room: scheduleForm.room.trim() || classRoom.name
+      });
+      showToast(`Mata pelajaran "${scheduleForm.subject}" berhasil ditambahkan ke ${classRoom.name}!`, 'success');
+    }
+    setIsScheduleModalOpen(false);
+  };
+
+  const handleDeleteSchedule = (item: ClassScheduleItem) => {
+    requestDeleteConfirm({
+      itemName: `Mata Pelajaran "${item.subject}" (${item.day}, ${item.timeSlot})`,
+      message: `Yakin ingin menghapus jadwal "${item.subject}" untuk kelas ${classRoom.name}? Jadwal di menu KBM juga akan disinkronkan secara otomatis.`,
+      onConfirm: () => {
+        deleteClassSchedule(item.id);
+        showToast('Jadwal pelajaran berhasil dihapus!', 'info');
+      }
+    });
+  };
+
+  return (
+    <div className="space-y-8 pb-24 text-[#2D2D2A]">
+      {/* 🔹 BACK TO CLASSES BUTTON & CLASS HEADER BANNER */}
+      <div className="space-y-4">
+        <button
+          onClick={onBack}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-white hover:bg-[#F5F5F0] text-[#5A5A40] text-xs font-bold uppercase tracking-wider rounded-xl border border-[#E0E0D8] transition-colors cursor-pointer shadow-sm"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>Kembali ke Daftar Semua Kelas</span>
+        </button>
+
+        <div className="bg-white border border-[#E0E0D8] rounded-[32px] p-6 sm:p-8 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="px-3 py-1 bg-[#F5F5F0] text-[#5A5A40] font-bold text-xs rounded-full border border-[#E0E0D8]">
+                {classRoom.grade} • TA {classRoom.academicYear}
+              </span>
+              {canManageClass && (
+                <span className="px-3 py-1 bg-[#8C4A32]/10 text-[#8C4A32] font-bold text-xs rounded-full border border-[#8C4A32]/20 flex items-center gap-1">
+                  <UserCheck className="w-3.5 h-3.5" />
+                  <span>Mode Akses Pengelola</span>
+                </span>
+              )}
+            </div>
+
+            <h1 className="font-serif text-3xl sm:text-4xl font-bold text-[#2D2D2A] tracking-tight">
+              {classRoom.name}
+            </h1>
+            <p className="text-[#8E8E85] text-sm">
+              Wali Kelas: <strong className="text-[#5A5A40]">{classRoom.perangkat.waliKelas}</strong>
+              {classRoom.jurusan && ` • Jurusan ${classRoom.jurusan}`}
+            </p>
+          </div>
+
+          {/* Quick Stats Badges & TikTok Button */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="px-4 py-3 bg-[#F5F5F0] border border-[#E0E0D8] rounded-2xl text-center min-w-[90px]">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#8E8E85] block">Total Siswa</span>
+              <span className="font-serif text-lg font-bold text-[#2D2D2A]">{totalStudents}</span>
+            </div>
+            <div className="px-4 py-3 bg-[#F5F5F0] border border-[#E0E0D8] rounded-2xl text-center min-w-[80px]">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#5A5A40] block">Laki-Laki</span>
+              <span className="font-serif text-lg font-bold text-[#5A5A40]">{maleCount}</span>
+            </div>
+            <div className="px-4 py-3 bg-[#F5F5F0] border border-[#E0E0D8] rounded-2xl text-center min-w-[80px]">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#8C4A32] block">Perempuan</span>
+              <span className="font-serif text-lg font-bold text-[#8C4A32]">{femaleCount}</span>
+            </div>
+
+            {/* 📱 TOMBOL QR CODE KENANGAN KELAS */}
+            <button
+              id="btn-qr-kelas"
+              type="button"
+              onClick={() => setIsQrModalOpen(true)}
+              className="px-4 py-3 bg-[#5A5A40] hover:bg-[#464632] text-white rounded-2xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 shadow-sm transition-all cursor-pointer active:scale-95 group"
+              title="Buat & Pindai Kode QR Kenangan Digital Kelas Ini Langsung dari HP"
+            >
+              <QrCode className="w-4 h-4 text-white group-hover:rotate-12 transition-transform" />
+              <span>QR Kenangan</span>
+            </button>
+
+            {/* 🎵 TOMBOL AKUN TIKTOK KELAS */}
+            {classRoom.tiktokUrl && (
+              <a
+                id="btn-tiktok-kelas"
+                href={classRoom.tiktokUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-4 py-3 bg-black hover:bg-neutral-900 text-white rounded-2xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 shadow-sm transition-all cursor-pointer active:scale-95 group border border-neutral-800"
+                title={`Kunjungi Akun TikTok Resmi Kelas ${classRoom.name}`}
+              >
+                <TikTokIcon className="w-4 h-4 text-white group-hover:scale-110 transition-transform" />
+                <span>TikTok Kelas</span>
+                <ExternalLink className="w-3.5 h-3.5 opacity-70" />
+              </a>
+            )}
+
+            {/* Tombol Ubah / Tambah TikTok oleh Admin Kelas & Admin Utama */}
+            {canManageClass && (
+              <button
+                id="btn-manage-tiktok-kelas"
+                type="button"
+                onClick={() => {
+                  setTiktokInput(classRoom.tiktokUrl || '');
+                  setIsEditingTikTok(true);
+                }}
+                className={`px-3.5 py-3 rounded-2xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 border transition-all cursor-pointer active:scale-95 ${
+                  classRoom.tiktokUrl 
+                    ? 'bg-[#F5F5F0] hover:bg-[#E0E0D8] text-[#5A5A40] border-[#E0E0D8]' 
+                    : 'bg-black hover:bg-neutral-900 text-white border-neutral-800 shadow-sm'
+                }`}
+                title="Ubah tautan akun TikTok kelas ini (Admin Kelas & Admin Utama)"
+              >
+                <TikTokIcon className={`w-4 h-4 ${classRoom.tiktokUrl ? 'text-black' : 'text-white'}`} />
+                <span>{classRoom.tiktokUrl ? 'Ubah TikTok' : '+ Akun TikTok'}</span>
+                <Edit3 className="w-3.5 h-3.5 opacity-70" />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 🔹 SUB NAVIGATION TABS */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 p-1.5 bg-white rounded-2xl border border-[#E0E0D8] shadow-sm">
+        <button
+          onClick={() => setActiveTab('gallery')}
+          className={`py-3 px-3 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+            activeTab === 'gallery'
+              ? 'bg-[#5A5A40] text-white shadow-sm'
+              : 'text-[#8E8E85] hover:text-[#2D2D2A]'
+          }`}
+        >
+          <Camera className="w-4 h-4" />
+          <span>📸 Galeri ({classRoom.gallery.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('officers')}
+          className={`py-3 px-3 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+            activeTab === 'officers'
+              ? 'bg-[#5A5A40] text-white shadow-sm'
+              : 'text-[#8E8E85] hover:text-[#2D2D2A]'
+          }`}
+        >
+          <Award className="w-4 h-4" />
+          <span>👥 Perangkat</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('students')}
+          className={`py-3 px-3 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+            activeTab === 'students'
+              ? 'bg-[#5A5A40] text-white shadow-sm'
+              : 'text-[#8E8E85] hover:text-[#2D2D2A]'
+          }`}
+        >
+          <Users className="w-4 h-4" />
+          <span>📋 Siswa ({totalStudents})</span>
+        </button>
+
+        <button
+          id="tab-class-schedules"
+          onClick={() => setActiveTab('schedules')}
+          className={`py-3 px-3 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+            activeTab === 'schedules'
+              ? 'bg-[#5A5A40] text-white shadow-sm'
+              : 'text-[#8E8E85] hover:text-[#2D2D2A]'
+          }`}
+        >
+          <BookOpen className="w-4 h-4" />
+          <span>📚 Mata Pelajaran ({thisClassSchedules.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('student_auth')}
+          className={`py-3 px-3 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+            activeTab === 'student_auth'
+              ? 'bg-[#8C4A32] text-white shadow-sm'
+              : 'text-[#8E8E85] hover:text-[#2D2D2A]'
+          }`}
+        >
+          <KeyRound className="w-4 h-4" />
+          <span>🔑 Login {currentStudentUser && '✓'}</span>
+        </button>
+      </div>
+
+      {/* 🔹 TAB 1: GALERI KEGIATAN KELAS */}
+      {activeTab === 'gallery' && (
+        <section className="space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h3 className="font-serif text-xl font-bold text-[#2D2D2A]">Dokumentasi Kenangan {classRoom.name}</h3>
+              <p className="text-xs sm:text-sm text-[#8E8E85]">
+                Kumpulan foto perpisahan, praktikum bersama, dan rekam jejak keceriaan di ruang kelas.
+              </p>
+            </div>
+
+            {canManageClass && (
+              <button
+                onClick={() => setIsPhotoModalOpen(true)}
+                className="px-4 py-2.5 rounded-xl bg-[#5A5A40] hover:bg-[#484833] text-white font-bold text-xs uppercase tracking-wider flex items-center gap-2 shadow-sm cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Unggah Foto Kenangan</span>
+              </button>
+            )}
+          </div>
+
+          {classRoom.gallery.length === 0 ? (
+            <div className="bg-white border border-[#E0E0D8] rounded-[32px] p-12 text-center text-[#8E8E85]">
+              <Camera className="w-12 h-12 mx-auto text-[#8E8E85] mb-3" />
+              <p className="font-serif text-base font-bold text-[#2D2D2A]">Belum ada foto kenangan kelas yang diunggah.</p>
+              {canManageClass && (
+                <button
+                  onClick={() => setIsPhotoModalOpen(true)}
+                  className="mt-4 px-4 py-2 bg-[#5A5A40] text-white hover:bg-[#484833] text-xs font-bold rounded-xl uppercase tracking-wider"
+                >
+                  Mulai Unggah Foto Sekarang
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {classRoom.gallery.filter(p => canManageClass || !p.isPrivate).map(photo => (
+                <div
+                  key={photo.id}
+                  className="bg-white border border-[#E0E0D8] rounded-[24px] overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col justify-between group relative"
+                >
+                  <div>
+                    <div className="relative aspect-[16/10] w-full bg-[#F5F5F0] overflow-hidden cursor-pointer" onClick={() => setLightboxPhoto(photo)}>
+                      <img
+                        src={photo.imageUrl}
+                        alt={photo.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        loading="lazy"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-60" />
+                      {photo.isPrivate && (
+                        <div className="absolute top-2 left-2 px-2.5 py-1 rounded-lg bg-red-600/90 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 backdrop-blur-sm shadow-sm">
+                          <Lock className="w-3 h-3" />
+                          <span>Privat (Diarsip)</span>
+                        </div>
+                      )}
+                      <div className="absolute top-2 right-2 p-1.5 rounded-lg bg-white/90 text-[#2D2D2A] backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Eye className="w-4 h-4" />
+                      </div>
+                    </div>
+
+                    <div className="p-4 space-y-2">
+                      <div className="flex items-center gap-1.5 text-xs text-[#5A5A40] font-bold">
+                        <Calendar className="w-3.5 h-3.5" />
+                        <span>{photo.date}</span>
+                      </div>
+                      <h4 className="font-serif text-sm font-bold text-[#2D2D2A] line-clamp-1">{photo.title}</h4>
+                      {photo.description && (
+                        <p className="text-xs text-[#8E8E85] line-clamp-2 leading-relaxed">{photo.description}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="px-4 pb-4">
+                    {/* Social Interactions: Like, Comment, Share */}
+                    <SocialActions
+                      itemId={photo.id}
+                      itemTitle={photo.title}
+                      likes={photo.likes || 0}
+                      likedBy={photo.likedBy || []}
+                      comments={photo.comments || []}
+                      shares={photo.shares || 0}
+                      onToggleLike={() => toggleClassPhotoLike(classRoom.id, photo.id)}
+                      onAddComment={(content, author) => addClassPhotoComment(classRoom.id, photo.id, content, author)}
+                      onShare={() => incrementClassPhotoShare(classRoom.id, photo.id)}
+                    />
+
+                    {canManageClass && (
+                      <div className="pt-2 border-t border-[#E0E0D8] flex items-center justify-between">
+                        <button
+                          type="button"
+                          onClick={() => toggleClassPhotoPrivacy(classRoom.id, photo.id)}
+                          className={`p-1.5 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors ${
+                            photo.isPrivate
+                              ? 'bg-amber-100 text-amber-900 hover:bg-amber-200'
+                              : 'bg-[#F5F5F0] text-[#5A5A40] hover:bg-[#E0E0D8]'
+                          }`}
+                          title={photo.isPrivate ? 'Jadikan Publik' : 'Privatkan (Masuk ke Arsipan)'}
+                        >
+                          <Lock className="w-3.5 h-3.5" />
+                          <span>{photo.isPrivate ? 'Buka Privat' : 'Privatkan'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            requestDeleteConfirm({
+                              itemName: photo.title,
+                              message: 'Yakin ingin menghapus foto kenangan ini? Tindakan ini tidak bisa dibatalkan.',
+                              onConfirm: () => deleteClassPhoto(classRoom.id, photo.id)
+                            });
+                          }}
+                          className="p-1.5 rounded-lg bg-[#8C4A32]/10 hover:bg-[#8C4A32]/20 text-[#8C4A32] text-xs flex items-center gap-1 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Hapus</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* 🔹 TAB 2: PERANGKAT KELAS */}
+      {activeTab === 'officers' && (
+        <section className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-serif text-xl font-bold text-[#2D2D2A]">Susunan Struktur Perangkat Kelas</h3>
+              <p className="text-xs sm:text-sm text-[#8E8E85]">
+                Pengurus kelas yang bertanggung jawab memimpin koordinasi dan ketertiban kelas {classRoom.name}.
+              </p>
+            </div>
+
+            {canManageClass && !isEditingPerangkat && (
+              <button
+                onClick={() => {
+                  setPerangkatForm({ ...classRoom.perangkat });
+                  setIsEditingPerangkat(true);
+                }}
+                className="px-4 py-2 bg-[#5A5A40] hover:bg-[#484833] text-white font-bold text-xs uppercase tracking-wider rounded-xl flex items-center gap-2 shadow-sm cursor-pointer"
+              >
+                <Edit3 className="w-4 h-4" />
+                <span>Ubah Perangkat Kelas</span>
+              </button>
+            )}
+          </div>
+
+          {isEditingPerangkat ? (
+            <form onSubmit={handleSavePerangkat} className="bg-white border border-[#E0E0D8] rounded-[32px] p-6 sm:p-8 space-y-5 shadow-sm">
+              <h4 className="font-serif text-base font-bold text-[#5A5A40] pb-2 border-b border-[#E0E0D8]">
+                Formulir Pengurus Kelas
+              </h4>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Nama Wali Kelas</label>
+                  <input
+                    type="text"
+                    required
+                    value={perangkatForm.waliKelas}
+                    onChange={e => setPerangkatForm({ ...perangkatForm, waliKelas: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-sm focus:outline-none focus:border-[#5A5A40]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] mb-1">NIP Wali Kelas (Opsional)</label>
+                  <input
+                    type="text"
+                    value={perangkatForm.nipWaliKelas || ''}
+                    onChange={e => setPerangkatForm({ ...perangkatForm, nipWaliKelas: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-sm focus:outline-none focus:border-[#5A5A40]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Ketua Kelas</label>
+                  <input
+                    type="text"
+                    required
+                    value={perangkatForm.ketuaKelas}
+                    onChange={e => setPerangkatForm({ ...perangkatForm, ketuaKelas: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-sm focus:outline-none focus:border-[#5A5A40]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Wakil Ketua Kelas</label>
+                  <input
+                    type="text"
+                    value={perangkatForm.wakilKetua}
+                    onChange={e => setPerangkatForm({ ...perangkatForm, wakilKetua: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-sm focus:outline-none focus:border-[#5A5A40]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Sekretaris 1</label>
+                  <input
+                    type="text"
+                    value={perangkatForm.sekretaris1}
+                    onChange={e => setPerangkatForm({ ...perangkatForm, sekretaris1: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-sm focus:outline-none focus:border-[#5A5A40]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Sekretaris 2</label>
+                  <input
+                    type="text"
+                    value={perangkatForm.sekretaris2 || ''}
+                    onChange={e => setPerangkatForm({ ...perangkatForm, sekretaris2: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-sm focus:outline-none focus:border-[#5A5A40]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Bendahara 1</label>
+                  <input
+                    type="text"
+                    value={perangkatForm.bendahara1}
+                    onChange={e => setPerangkatForm({ ...perangkatForm, bendahara1: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-sm focus:outline-none focus:border-[#5A5A40]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Bendahara 2</label>
+                  <input
+                    type="text"
+                    value={perangkatForm.bendahara2 || ''}
+                    onChange={e => setPerangkatForm({ ...perangkatForm, bendahara2: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-sm focus:outline-none focus:border-[#5A5A40]"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#E0E0D8]">
+                <button
+                  type="button"
+                  onClick={() => setIsEditingPerangkat(false)}
+                  className="px-4 py-2 bg-[#E0E0D8] hover:bg-[#D0D0C8] text-[#2D2D2A] text-xs font-bold rounded-xl cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-2 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-md cursor-pointer hover:scale-[1.02] active:scale-95 transition-all"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>SIMPAN PERANGKAT KELAS</span>
+                </button>
+              </div>
+            </form>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {/* Wali Kelas Card */}
+              <div className="md:col-span-2 lg:col-span-3 bg-white border border-[#E0E0D8] rounded-[28px] p-6 flex items-center gap-4 shadow-sm">
+                <div className="w-14 h-14 rounded-2xl bg-[#F5F5F0] text-[#5A5A40] border border-[#E0E0D8] flex items-center justify-center flex-shrink-0">
+                  <GraduationCap className="w-8 h-8" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#5A5A40]">
+                    Wali Kelas & Pembimbing
+                  </span>
+                  <h4 className="font-serif text-lg sm:text-xl font-bold text-[#2D2D2A]">{classRoom.perangkat.waliKelas}</h4>
+                  {classRoom.perangkat.nipWaliKelas && (
+                    <p className="text-xs text-[#8E8E85]">NIP: {classRoom.perangkat.nipWaliKelas}</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Ketua & Wakil */}
+              <div className="bg-white border border-[#E0E0D8] rounded-2xl p-5 space-y-1 shadow-sm">
+                <span className="text-xs font-bold uppercase tracking-wider text-[#5A5A40]">Ketua Kelas</span>
+                <p className="font-serif text-base font-bold text-[#2D2D2A]">{classRoom.perangkat.ketuaKelas || '-'}</p>
+              </div>
+
+              <div className="bg-white border border-[#E0E0D8] rounded-2xl p-5 space-y-1 shadow-sm">
+                <span className="text-xs font-bold uppercase tracking-wider text-[#5A5A40]">Wakil Ketua Kelas</span>
+                <p className="font-serif text-base font-bold text-[#2D2D2A]">{classRoom.perangkat.wakilKetua || '-'}</p>
+              </div>
+
+              {/* Sekretaris */}
+              <div className="bg-white border border-[#E0E0D8] rounded-2xl p-5 space-y-1 shadow-sm">
+                <span className="text-xs font-bold uppercase tracking-wider text-[#5A5A40]">Sekretaris</span>
+                <p className="font-serif text-base font-bold text-[#2D2D2A]">{classRoom.perangkat.sekretaris1 || '-'}</p>
+                {classRoom.perangkat.sekretaris2 && (
+                  <p className="text-xs text-[#8E8E85]">Sekretaris 2: {classRoom.perangkat.sekretaris2}</p>
+                )}
+              </div>
+
+              {/* Bendahara */}
+              <div className="bg-white border border-[#E0E0D8] rounded-2xl p-5 space-y-1 shadow-sm">
+                <span className="text-xs font-bold uppercase tracking-wider text-[#8C4A32]">Bendahara</span>
+                <p className="font-serif text-base font-bold text-[#2D2D2A]">{classRoom.perangkat.bendahara1 || '-'}</p>
+                {classRoom.perangkat.bendahara2 && (
+                  <p className="text-xs text-[#8E8E85]">Bendahara 2: {classRoom.perangkat.bendahara2}</p>
+                )}
+              </div>
+
+              {/* Seksi-Seksi */}
+              {classRoom.perangkat.seksi && classRoom.perangkat.seksi.map(s => (
+                <div key={s.id} className="bg-white border border-[#E0E0D8] rounded-2xl p-5 space-y-1 shadow-sm">
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#5A5A40]">Seksi {s.bidang}</span>
+                  <p className="font-serif text-base font-bold text-[#2D2D2A]">{s.nama}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* 🔹 TAB 3: DATA SISWA & STATISTIK */}
+      {activeTab === 'students' && (
+        <section className="space-y-6">
+          {/* Header and Add Button */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h3 className="font-serif text-xl font-bold text-[#2D2D2A]">Daftar Seluruh Siswa {classRoom.name}</h3>
+              <p className="text-xs sm:text-sm text-[#8E8E85]">
+                Direktori nama, foto profil kenangan, serta kutipan inspirasi siswa.
+              </p>
+            </div>
+
+            {canManageClass && (
+              <button
+                onClick={handleOpenAddStudent}
+                className="px-4 py-2.5 bg-[#5A5A40] hover:bg-[#484833] text-white font-bold text-xs uppercase tracking-wider rounded-xl flex items-center gap-2 shadow-sm cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Tambah Siswa Baru</span>
+              </button>
+            )}
+          </div>
+
+          {/* Search Bar */}
+          <div className="relative max-w-md">
+            <Search className="w-4 h-4 absolute left-3.5 top-3 text-[#8E8E85]" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              placeholder="Cari nama siswa atau NISN..."
+              className="w-full pl-10 pr-4 py-2.5 bg-white border border-[#E0E0D8] rounded-2xl text-sm text-[#2D2D2A] placeholder-[#8E8E85] focus:outline-none focus:border-[#5A5A40]"
+            />
+          </div>
+
+          {/* Student Cards Grid */}
+          {filteredStudents.length === 0 ? (
+            <div className="bg-white border border-[#E0E0D8] rounded-[32px] p-12 text-center text-[#8E8E85]">
+              <Users className="w-12 h-12 mx-auto text-[#8E8E85] mb-3" />
+              <p className="font-serif text-base font-bold text-[#2D2D2A]">Tidak ada siswa yang ditemukan.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredStudents.map((std, idx) => (
+                <div
+                  key={std.id}
+                  className="bg-white border border-[#E0E0D8] rounded-[28px] p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-4"
+                >
+                  <div className="flex items-start gap-4">
+                    {/* Student Avatar */}
+                    <div className="w-16 h-16 rounded-2xl overflow-hidden bg-[#F5F5F0] flex-shrink-0 border border-[#E0E0D8]">
+                      {std.photoUrl ? (
+                        <img src={std.photoUrl} alt={std.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center bg-[#5A5A40]/10 text-[#5A5A40] font-serif font-bold text-lg">
+                          {std.name ? std.name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase() : 'S'}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${
+                          std.gender === 'L' ? 'bg-[#F5F5F0] text-[#5A5A40] border border-[#E0E0D8]' : 'bg-[#FAF8F5] text-[#8C4A32] border border-[#E0E0D8]'
+                        }`}>
+                          {std.gender === 'L' ? 'Laki-laki' : 'Perempuan'}
+                        </span>
+                        <span className="text-[10px] text-[#8E8E85] font-mono">No. {idx + 1}</span>
+                      </div>
+                      <h4 className="font-serif text-base font-bold text-[#2D2D2A] mt-1 line-clamp-1">{std.name}</h4>
+                      <p className="text-xs text-[#8E8E85] font-mono">NISN: {std.nisn}</p>
+                    </div>
+                  </div>
+
+                  {/* Quote / Memory / Cita-cita */}
+                  <div className="space-y-2 bg-[#F8F8F5] p-4 rounded-2xl border border-[#E0E0D8] text-xs">
+                    {std.quote && (
+                      <p className="text-[#5A5A40] italic font-medium">"{std.quote}"</p>
+                    )}
+                    {std.citaCita && (
+                      <p className="text-[#2D2D2A]">
+                        <strong className="text-[#8E8E85]">Cita-cita:</strong> {std.citaCita}
+                      </p>
+                    )}
+                    {std.pesanKesan && (
+                      <p className="text-[#8E8E85] text-[11px] line-clamp-2">
+                        {std.pesanKesan}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Contact / Social & Admin Actions */}
+                  <div className="pt-2 border-t border-[#E0E0D8] flex items-center justify-between text-xs text-[#8E8E85]">
+                    <div className="flex items-center gap-2">
+                      {std.instagram && (
+                        <span className="text-[#8C4A32] flex items-center gap-1">
+                          <Instagram className="w-3.5 h-3.5" />
+                          <span className="text-[11px] truncate max-w-[80px]">{std.instagram}</span>
+                        </span>
+                      )}
+                    </div>
+
+                    {canManageClass && (
+                      <div className="flex items-center gap-1.5">
+                        {/* Device reset button */}
+                        <button
+                          type="button"
+                          onClick={() => resetStudentSession(std.id)}
+                          className="p-1.5 rounded-lg bg-[#F5F5F0] hover:bg-[#E0E0D8] text-[#5A5A40] cursor-pointer"
+                          title="Reset status login perangkat siswa"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditStudent(std)}
+                          className="p-1.5 rounded-lg bg-[#F5F5F0] hover:bg-[#E0E0D8] text-[#2D2D2A] cursor-pointer"
+                          title="Edit Siswa"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            requestDeleteConfirm({
+                              itemName: std.name,
+                              message: `Yakin ingin menghapus siswa ${std.name}? Tindakan ini tidak bisa dibatalkan.`,
+                              onConfirm: () => deleteStudent(std.id)
+                            });
+                          }}
+                          className="p-1.5 rounded-lg bg-[#8C4A32]/10 hover:bg-[#8C4A32]/20 text-[#8C4A32] cursor-pointer"
+                          title="Hapus Siswa"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* 🔹 TAB 4: LOGIN SISWA & PROFIL PRIBADI */}
+      {activeTab === 'student_auth' && (
+        <section className="max-w-2xl mx-auto">
+          {currentStudentUser ? (
+            /* Student is logged in: Display Edit Profile & Credentials */
+            <div className="bg-white border border-[#E0E0D8] rounded-[32px] p-6 sm:p-8 space-y-6 shadow-sm">
+              <div className="flex items-center justify-between pb-4 border-b border-[#E0E0D8]">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-[#F5F5F0] text-[#5A5A40] border border-[#E0E0D8] flex items-center justify-center font-bold text-lg">
+                    {currentStudentUser.gender === 'L' ? '👨' : '👩'}
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold uppercase tracking-wider text-[#5A5A40]">Akun Siswa Aktif</span>
+                    <h3 className="font-serif text-xl font-bold text-[#2D2D2A]">{currentStudentUser.name}</h3>
+                  </div>
+                </div>
+
+                <button
+                  onClick={logout}
+                  className="px-3.5 py-1.5 bg-[#E0E0D8] hover:bg-[#D0D0C8] text-[#2D2D2A] text-xs font-bold rounded-xl cursor-pointer"
+                >
+                  Keluar Akun
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveSelfProfile} className="space-y-4">
+                <h4 className="font-serif text-sm font-bold text-[#5A5A40]">Lengkapi Profil Kenangan Anda:</h4>
+
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Kutipan / Quotes Favorit</label>
+                  <input
+                    type="text"
+                    value={selfProfileForm.quote}
+                    onChange={e => setSelfProfileForm({ ...selfProfileForm, quote: e.target.value })}
+                    placeholder="Contoh: Terus berjuang menggapai cita!"
+                    className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-sm focus:outline-none focus:border-[#5A5A40]"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Cita-cita Masa Depan</label>
+                    <input
+                      type="text"
+                      value={selfProfileForm.citaCita}
+                      onChange={e => setSelfProfileForm({ ...selfProfileForm, citaCita: e.target.value })}
+                      placeholder="Contoh: Dokter Bedah / Pilot"
+                      className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-sm focus:outline-none focus:border-[#5A5A40]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Akun Instagram</label>
+                    <input
+                      type="text"
+                      value={selfProfileForm.instagram}
+                      onChange={e => setSelfProfileForm({ ...selfProfileForm, instagram: e.target.value })}
+                      placeholder="@username_kamu"
+                      className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-sm focus:outline-none focus:border-[#5A5A40]"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Pesan & Kesan untuk Kelas & Sekolah</label>
+                  <textarea
+                    rows={3}
+                    value={selfProfileForm.pesanKesan}
+                    onChange={e => setSelfProfileForm({ ...selfProfileForm, pesanKesan: e.target.value })}
+                    placeholder="Tuliskan kesan pesan manis selama bersekolah bersama kawan-kawan..."
+                    className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-sm focus:outline-none focus:border-[#5A5A40]"
+                  />
+                </div>
+
+                <div>
+                  <MediaUploadField
+                    id="student-self-photo-upload"
+                    label="Upload Foto Profil Siswa"
+                    mediaType="image"
+                    value={selfProfileForm.photoUrl}
+                    onChange={url => setSelfProfileForm({ ...selfProfileForm, photoUrl: url })}
+                    helperText="Pilih foto kenangan terbaik Anda dari galeri perangkat."
+                  />
+                </div>
+
+                <div className="pt-3 border-t border-[#E0E0D8]">
+                  <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Ganti Kata Sandi Siswa (Opsional)</label>
+                  <input
+                    type="password"
+                    value={selfProfileForm.newPassword}
+                    onChange={e => setSelfProfileForm({ ...selfProfileForm, newPassword: e.target.value })}
+                    placeholder="Ketik kata sandi baru jika ingin mengubah..."
+                    className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-sm focus:outline-none focus:border-[#5A5A40]"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-md cursor-pointer hover:scale-[1.01] active:scale-95 transition-all flex items-center justify-center gap-2"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>SIMPAN PROFIL KENANGAN SAYA</span>
+                </button>
+              </form>
+            </div>
+          ) : (
+            /* Student is NOT logged in: Direct in-class login form */
+            <div className="bg-white border border-[#E0E0D8] rounded-[32px] p-6 sm:p-8 space-y-5 shadow-sm">
+              <div className="text-center space-y-2 pb-4 border-b border-[#E0E0D8]">
+                <div className="w-14 h-14 rounded-2xl bg-[#F5F5F0] text-[#5A5A40] border border-[#E0E0D8] mx-auto flex items-center justify-center">
+                  <KeyRound className="w-7 h-7" />
+                </div>
+                <h3 className="font-serif text-xl font-bold text-[#2D2D2A]">Login Siswa {classRoom.name}</h3>
+                <p className="text-xs text-[#8E8E85] max-w-md mx-auto">
+                  Cukup pilih nama Anda dan masukkan kata sandi tanpa perlu email. Satu nama hanya dapat aktif di satu perangkat.
+                </p>
+              </div>
+
+              {inClassLoginError && (
+                <div className="p-3.5 bg-[#8C4A32]/10 border border-[#8C4A32]/30 rounded-2xl text-[#8C4A32] text-xs sm:text-sm flex items-start gap-2.5">
+                  <AlertCircle className="w-4 h-4 text-[#8C4A32] flex-shrink-0 mt-0.5" />
+                  <p className="font-medium leading-relaxed">{inClassLoginError}</p>
+                </div>
+              )}
+
+              <form onSubmit={handleInClassLogin} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Pilih Nama Anda</label>
+                  <select
+                    value={inClassLoginStudentId}
+                    onChange={e => setInClassLoginStudentId(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-sm focus:outline-none focus:border-[#5A5A40]"
+                  >
+                    <option value="">-- Pilih Nama Siswa --</option>
+                    {classStudents.map(s => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} ({s.gender === 'L' ? 'L' : 'P'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-bold text-[#2D2D2A]">Kata Sandi Siswa</label>
+                    <span className="text-[10px] text-[#8E8E85]">Bawaan: 123456</span>
+                  </div>
+                  <input
+                    type="password"
+                    value={inClassLoginPassword}
+                    onChange={e => setInClassLoginPassword(e.target.value)}
+                    placeholder="Masukkan kata sandi..."
+                    className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-sm focus:outline-none focus:border-[#5A5A40]"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full py-3 bg-[#5A5A40] hover:bg-[#484833] text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-sm cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <KeyRound className="w-4 h-4" />
+                  <span>Masuk ke Akun Siswa</span>
+                </button>
+              </form>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* 🔹 TAB 5: MATA PELAJARAN & JADWAL KBM KELAS */}
+      {activeTab === 'schedules' && (
+        <section className="space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#5A5A40]/10 text-[#5A5A40] text-xs font-bold uppercase tracking-wider rounded-full mb-1">
+                <BookOpen className="w-3.5 h-3.5" />
+                <span>Kurikulum & KBM {classRoom.name}</span>
+              </div>
+              <h3 className="font-serif text-xl font-bold text-[#2D2D2A]">Mata Pelajaran & Jadwal Belajar</h3>
+              <p className="text-xs sm:text-sm text-[#8E8E85]">
+                Daftar mata pelajaran, guru pengampu, dan alokasi waktu. Perubahan yang dilakukan di sini otomatis tersinkronisasi ke menu Jadwal KBM Utama.
+              </p>
+            </div>
+
+            {canManageClass && (
+              <button
+                type="button"
+                id="btn-add-class-subject"
+                onClick={handleOpenAddSchedule}
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#5A5A40] hover:bg-[#484833] text-white text-xs font-bold uppercase tracking-wider rounded-2xl shadow-sm transition-all cursor-pointer active:scale-95 shrink-0"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ Tambah Mata Pelajaran</span>
+              </button>
+            )}
+          </div>
+
+          {/* Day Filter Pills */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+            {['Semua', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'].map(day => (
+              <button
+                key={day}
+                type="button"
+                onClick={() => setSelectedScheduleDay(day)}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  selectedScheduleDay === day
+                    ? 'bg-[#5A5A40] text-white shadow-xs'
+                    : 'bg-white border border-[#E0E0D8] text-[#8E8E85] hover:text-[#2D2D2A]'
+                }`}
+              >
+                {day}
+              </button>
+            ))}
+          </div>
+
+          {/* Schedules Grid / List */}
+          {sortedClassSchedules.length === 0 ? (
+            <div className="bg-white border border-[#E0E0D8] rounded-[28px] p-8 text-center space-y-3">
+              <div className="w-14 h-14 rounded-2xl bg-[#F5F5F0] text-[#5A5A40] border border-[#E0E0D8] mx-auto flex items-center justify-center">
+                <BookOpen className="w-7 h-7" />
+              </div>
+              <h4 className="font-serif text-lg font-bold text-[#2D2D2A]">Belum Ada Jadwal Mata Pelajaran</h4>
+              <p className="text-xs text-[#8E8E85] max-w-md mx-auto">
+                {selectedScheduleDay === 'Semua' 
+                  ? `Jadwal mata pelajaran untuk ${classRoom.name} belum ditambahkan.`
+                  : `Tidak ada jadwal pelajaran pada hari ${selectedScheduleDay}.`}
+              </p>
+              {canManageClass && (
+                <button
+                  type="button"
+                  onClick={handleOpenAddSchedule}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-[#5A5A40] text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow-xs hover:bg-[#484833] cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Tambah Mapel Sekarang</span>
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {sortedClassSchedules.map(item => (
+                <div
+                  key={item.id}
+                  className="bg-white border border-[#E0E0D8] rounded-2xl p-4.5 space-y-3 shadow-xs hover:shadow-md transition-all flex flex-col justify-between"
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="px-2.5 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-[#5A5A40]/10 text-[#5A5A40] border border-[#5A5A40]/20">
+                        {item.day}
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#8E8E85]">
+                        <Clock className="w-3 h-3 text-[#5A5A40]" />
+                        <span>{item.timeSlot}</span>
+                      </span>
+                    </div>
+
+                    <div>
+                      <h4 className="font-serif text-base font-bold text-[#2D2D2A] leading-snug">
+                        {item.subject}
+                      </h4>
+                      <p className="text-xs text-[#8E8E85] flex items-center gap-1.5 mt-1">
+                        <User className="w-3.5 h-3.5 text-[#5A5A40] shrink-0" />
+                        <span className="font-medium text-[#2D2D2A]">{item.teacherName}</span>
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2.5 border-t border-[#E0E0D8]/60 text-xs">
+                    <span className="text-[11px] text-[#8E8E85]">
+                      Ruang: <strong className="text-[#2D2D2A]">{item.room || classRoom.name}</strong>
+                    </span>
+
+                    {canManageClass && (
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditSchedule(item)}
+                          className="p-1.5 text-[#5A5A40] hover:bg-[#F5F5F0] rounded-lg transition-colors cursor-pointer"
+                          title="Edit Mata Pelajaran"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteSchedule(item)}
+                          className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                          title="Hapus Jadwal"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* 🔹 ADD MULTI PHOTO / VIDEO MODAL */}
+      {isPhotoModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
+          <div className="relative w-full max-w-2xl bg-white border border-[#E0E0D8] rounded-[32px] shadow-2xl p-6 sm:p-8 text-[#2D2D2A] max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E0E0D8] mb-4">
+              <div>
+                <h3 className="font-serif text-lg font-bold text-[#5A5A40]">Unggah Foto & Video Kenangan Kelas</h3>
+                <p className="text-xs text-[#8E8E85]">Admin dapat memilih satu atau beberapa foto/video sekaligus untuk diunggah</p>
+              </div>
+              <button onClick={() => setIsPhotoModalOpen(false)} className="text-[#8E8E85] hover:text-[#2D2D2A] p-1.5 rounded-xl hover:bg-[#F5F5F0]">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSavePhoto} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Judul / Acara Utama *</label>
+                  <input
+                    type="text"
+                    required
+                    value={photoForm.title}
+                    onChange={e => setPhotoForm({ ...photoForm, title: e.target.value })}
+                    placeholder="Contoh: Wisuda, Praktikum Kimia, Kemah"
+                    className="w-full px-3.5 py-2 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-sm focus:outline-none focus:border-[#5A5A40]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Tanggal Kegiatan *</label>
+                  <input
+                    type="text"
+                    required
+                    value={photoForm.date}
+                    onChange={e => setPhotoForm({ ...photoForm, date: e.target.value })}
+                    className="w-full px-3.5 py-2 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-sm focus:outline-none focus:border-[#5A5A40]"
+                  />
+                </div>
+              </div>
+
+              {/* Multi Media Upload Field for uploading multiple photos and videos at once */}
+              <div className="space-y-1 bg-[#FBFBFA] p-4 rounded-2xl border border-[#E0E0D8]">
+                <MultiMediaUploadField
+                  id="class-multi-media-upload"
+                  label="Pilih Foto & Video Sekaligus (Multi-Upload)"
+                  allowedMediaType="both"
+                  items={multiMediaList}
+                  onChange={items => setMultiMediaList(items)}
+                  helperText="Tarik beberapa berkas foto/video sekaligus dari galeri Anda. Anda juga bisa memberi judul/keterangan individual pada tiap foto di atas."
+                />
+
+                {/* Optional single URL fallback if no multi items selected */}
+                {multiMediaList.length === 0 && (
+                  <div className="pt-3 border-t border-[#E0E0D8]/60 mt-3">
+                    <label className="block text-[11px] font-bold text-[#8E8E85] mb-1">Atau masukkan 1 URL Foto/Video langsung:</label>
+                    <input
+                      type="text"
+                      value={photoForm.imageUrl}
+                      onChange={e => setPhotoForm({ ...photoForm, imageUrl: e.target.value })}
+                      placeholder="https://.../foto-kenangan.jpg"
+                      className="w-full px-3.5 py-2 bg-white border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-xs focus:outline-none focus:border-[#5A5A40]"
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Catatan / Deskripsi Tambahan</label>
+                <textarea
+                  rows={2}
+                  value={photoForm.description}
+                  onChange={e => setPhotoForm({ ...photoForm, description: e.target.value })}
+                  placeholder="Cerita atau pesan manis tentang momen ini..."
+                  className="w-full px-3.5 py-2 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-sm focus:outline-none focus:border-[#5A5A40]"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#E0E0D8]">
+                <button
+                  type="button"
+                  onClick={() => setIsPhotoModalOpen(false)}
+                  className="px-4 py-2 bg-[#E0E0D8] hover:bg-[#D0D0C8] text-[#2D2D2A] text-xs font-bold rounded-xl cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={multiMediaList.length === 0 && !photoForm.imageUrl.trim()}
+                  className="inline-flex items-center gap-2 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-md cursor-pointer hover:scale-[1.02] active:scale-95 transition-all"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>
+                    {multiMediaList.length > 1
+                      ? `UNGGAH ${multiMediaList.length} MEDIA SEKALIGUS`
+                      : 'SIMPAN FOTO / VIDEO KELAS'}
+                  </span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 🔹 ADD/EDIT STUDENT MODAL */}
+      {isStudentModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
+          <div className="relative w-full max-w-xl bg-white border border-[#E0E0D8] rounded-[32px] shadow-2xl p-6 sm:p-8 max-h-[90vh] overflow-y-auto text-[#2D2D2A]">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E0E0D8] mb-4">
+              <h3 className="font-serif text-lg font-bold text-[#5A5A40]">
+                {editingStudent ? 'Edit Data Siswa' : 'Tambah Siswa Baru ke Kelas'}
+              </h3>
+              <button onClick={() => setIsStudentModalOpen(false)} className="text-[#8E8E85] hover:text-[#2D2D2A] p-1.5 rounded-xl hover:bg-[#F5F5F0]">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveStudent} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Nama Lengkap Siswa *</label>
+                  <input
+                    type="text"
+                    required
+                    value={studentForm.name}
+                    onChange={e => setStudentForm({ ...studentForm, name: e.target.value })}
+                    placeholder="Contoh: Muhammad Rizky"
+                    className="w-full px-3.5 py-2 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-sm focus:outline-none focus:border-[#5A5A40]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Jenis Kelamin *</label>
+                  <select
+                    value={studentForm.gender}
+                    onChange={e => setStudentForm({ ...studentForm, gender: e.target.value as 'L' | 'P' })}
+                    className="w-full px-3.5 py-2 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-sm focus:outline-none focus:border-[#5A5A40]"
+                  >
+                    <option value="L">Laki-laki (L)</option>
+                    <option value="P">Perempuan (P)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] mb-1">NISN Siswa</label>
+                  <input
+                    type="text"
+                    value={studentForm.nisn}
+                    onChange={e => setStudentForm({ ...studentForm, nisn: e.target.value })}
+                    className="w-full px-3.5 py-2 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-sm focus:outline-none focus:border-[#5A5A40]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Kata Sandi Login (Bawaan: 123456)</label>
+                  <input
+                    type="text"
+                    value={studentForm.passwordHash}
+                    onChange={e => setStudentForm({ ...studentForm, passwordHash: e.target.value })}
+                    className="w-full px-3.5 py-2 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-sm focus:outline-none focus:border-[#5A5A40]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <MediaUploadField
+                  id="student-form-photo-upload"
+                  label="Upload Foto Profil Siswa"
+                  mediaType="image"
+                  value={studentForm.photoUrl}
+                  onChange={url => setStudentForm({ ...studentForm, photoUrl: url })}
+                  helperText="Upload pas foto atau foto santai siswa dari galeri perangkat."
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Quotes / Kata Kenangan</label>
+                <input
+                  type="text"
+                  value={studentForm.quote}
+                  onChange={e => setStudentForm({ ...studentForm, quote: e.target.value })}
+                  placeholder="Kutipan inspirasi..."
+                  className="w-full px-3.5 py-2 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-sm focus:outline-none focus:border-[#5A5A40]"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Cita-cita</label>
+                  <input
+                    type="text"
+                    value={studentForm.citaCita}
+                    onChange={e => setStudentForm({ ...studentForm, citaCita: e.target.value })}
+                    className="w-full px-3.5 py-2 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-sm focus:outline-none focus:border-[#5A5A40]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Instagram (@username)</label>
+                  <input
+                    type="text"
+                    value={studentForm.instagram}
+                    onChange={e => setStudentForm({ ...studentForm, instagram: e.target.value })}
+                    className="w-full px-3.5 py-2 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-sm focus:outline-none focus:border-[#5A5A40]"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#E0E0D8]">
+                <button
+                  type="button"
+                  onClick={() => setIsStudentModalOpen(false)}
+                  className="px-4 py-2 bg-[#E0E0D8] hover:bg-[#D0D0C8] text-[#2D2D2A] text-xs font-bold rounded-xl cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-2 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-md cursor-pointer hover:scale-[1.02] active:scale-95 transition-all"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>SIMPAN DATA SISWA</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 🔹 EDIT TIKTOK KELAS MODAL (Admin Kelas & Admin Utama) */}
+      {isEditingTikTok && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
+          <div className="relative w-full max-w-md bg-white border border-[#E0E0D8] rounded-[32px] shadow-2xl p-6 sm:p-7 text-[#2D2D2A]">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E0E0D8] mb-4">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-black text-white">
+                  <TikTokIcon className="w-4 h-4 text-white" />
+                </div>
+                <div>
+                  <h3 className="font-serif text-lg font-bold text-[#2D2D2A]">
+                    Akun TikTok Kelas
+                  </h3>
+                  <p className="text-xs text-[#8E8E85]">{classRoom.name}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsEditingTikTok(false)}
+                className="text-[#8E8E85] hover:text-[#2D2D2A] p-1.5 rounded-xl hover:bg-[#F5F5F0] cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveTikTok} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-[#2D2D2A] mb-1.5">
+                  Tautan / URL Akun TikTok Kelas
+                </label>
+                <input
+                  type="url"
+                  value={tiktokInput}
+                  onChange={e => setTiktokInput(e.target.value)}
+                  placeholder="https://www.tiktok.com/@kelas_12ipa1"
+                  className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-sm focus:border-[#5A5A40] focus:outline-none"
+                  autoFocus
+                />
+                <p className="text-[11px] text-[#8E8E85] mt-1.5">
+                  Tautan ini dapat diubah oleh Admin Kelas dan Admin Utama, dan akan disinkronkan langsung ke pusat data.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-[#E0E0D8]">
+                {classRoom.tiktokUrl && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      updateClass(classRoom.id, { tiktokUrl: undefined });
+                      setIsEditingTikTok(false);
+                    }}
+                    className="px-3.5 py-2 text-xs font-bold text-[#8C4A32] hover:bg-[#8C4A32]/10 rounded-xl cursor-pointer mr-auto"
+                  >
+                    Hapus Link
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsEditingTikTok(false)}
+                  className="px-4 py-2 text-xs font-bold bg-[#E0E0D8] hover:bg-[#D0D0C8] text-[#2D2D2A] rounded-xl cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-2 px-5 py-2 bg-[#5A5A40] hover:bg-[#484833] text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-sm cursor-pointer active:scale-95 transition-all"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>Simpan Link</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 🔹 ADD/EDIT CLASS SCHEDULE & SUBJECT MODAL */}
+      {isScheduleModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
+          <div className="relative w-full max-w-lg bg-white border border-[#E0E0D8] rounded-[28px] shadow-2xl p-6 sm:p-7 text-[#2D2D2A] max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E0E0D8] mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-[#5A5A40] text-white flex items-center justify-center">
+                  <BookOpen className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-serif text-lg font-bold text-[#5A5A40]">
+                    {editingSchedule ? 'Edit Mata Pelajaran' : 'Tambah Mata Pelajaran'}
+                  </h3>
+                  <p className="text-xs text-[#8E8E85]">
+                    Kelas {classRoom.name} • Sinkronisasi otomatis ke Jadwal KBM
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsScheduleModalOpen(false)}
+                className="text-[#8E8E85] hover:text-[#2D2D2A] p-1.5 rounded-xl hover:bg-[#F5F5F0] cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveSchedule} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] mb-1.5">
+                    Hari Pelajaran *
+                  </label>
+                  <select
+                    value={scheduleForm.day}
+                    onChange={e => setScheduleForm({ ...scheduleForm, day: e.target.value as any })}
+                    className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-sm focus:border-[#5A5A40] focus:outline-none"
+                  >
+                    <option value="Senin">Senin</option>
+                    <option value="Selasa">Selasa</option>
+                    <option value="Rabu">Rabu</option>
+                    <option value="Kamis">Kamis</option>
+                    <option value="Jumat">Jumat</option>
+                    <option value="Sabtu">Sabtu</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] mb-1.5">
+                    Jam Belajar / Alokasi Waktu *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={scheduleForm.timeSlot}
+                    onChange={e => setScheduleForm({ ...scheduleForm, timeSlot: e.target.value })}
+                    placeholder="Contoh: 07:30 - 09:00"
+                    className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-sm focus:border-[#5A5A40] focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#2D2D2A] mb-1.5">
+                  Nama Mata Pelajaran *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={scheduleForm.subject}
+                  onChange={e => setScheduleForm({ ...scheduleForm, subject: e.target.value })}
+                  placeholder="Contoh: Matematika Peminatan / Fisika Terapan"
+                  className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-sm focus:border-[#5A5A40] focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#2D2D2A] mb-1.5">
+                  Nama Guru Pengampu / Pengajar *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={scheduleForm.teacherName}
+                  onChange={e => setScheduleForm({ ...scheduleForm, teacherName: e.target.value })}
+                  placeholder="Contoh: Dra. Hj. Siti Aminah, M.Pd"
+                  className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-sm focus:border-[#5A5A40] focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#2D2D2A] mb-1.5">
+                  Ruang Belajar / Laboratorium (Opsional)
+                </label>
+                <input
+                  type="text"
+                  value={scheduleForm.room}
+                  onChange={e => setScheduleForm({ ...scheduleForm, room: e.target.value })}
+                  placeholder={`Contoh: Ruang ${classRoom.name} / Lab Komputer`}
+                  className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-sm focus:border-[#5A5A40] focus:outline-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-[#E0E0D8]">
+                <button
+                  type="button"
+                  onClick={() => setIsScheduleModalOpen(false)}
+                  className="px-4 py-2.5 text-xs font-bold bg-[#E0E0D8] hover:bg-[#D0D0C8] text-[#2D2D2A] rounded-xl cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#5A5A40] hover:bg-[#484833] text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-sm cursor-pointer active:scale-95 transition-all"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>{editingSchedule ? 'Simpan Perubahan' : 'Tambah Mapel'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 🔹 PHOTO LIGHTBOX */}
+      {lightboxPhoto && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+          <div className="relative max-w-4xl w-full bg-white border border-[#E0E0D8] rounded-[32px] overflow-hidden shadow-2xl">
+            <button
+              onClick={() => setLightboxPhoto(null)}
+              className="absolute top-4 right-4 p-2 rounded-full bg-black/60 text-white z-20 hover:bg-black/80 cursor-pointer"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            <div className="aspect-[16/10] w-full bg-[#1A1A18]">
+              <img src={lightboxPhoto.imageUrl} alt={lightboxPhoto.title} className="w-full h-full object-contain" />
+            </div>
+            <div className="p-6 bg-white border-t border-[#E0E0D8]">
+              <div className="flex items-center gap-2 text-[#5A5A40] text-xs font-bold uppercase tracking-wider mb-1">
+                <Calendar className="w-4 h-4" />
+                <span>{lightboxPhoto.date}</span>
+              </div>
+              <h3 className="font-serif text-xl font-bold text-[#2D2D2A]">{lightboxPhoto.title}</h3>
+              {lightboxPhoto.description && (
+                <p className="text-sm text-[#8E8E85] mt-2">{lightboxPhoto.description}</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 📱 QR CODE MODAL UNTUK KELAS INI */}
+      <QRCodeModal
+        isOpen={isQrModalOpen}
+        onClose={() => setIsQrModalOpen(false)}
+        data={{
+          type: 'class',
+          id: classRoom.id,
+          title: `Ruang Kelas ${classRoom.name}`,
+          subtitle: `Wali Kelas: ${classRoom.perangkat.waliKelas || '-'} • ${classRoom.grade} TA ${classRoom.academicYear}`,
+          category: classRoom.jurusan || classRoom.grade
+        }}
+      />
+    </div>
+  );
+};

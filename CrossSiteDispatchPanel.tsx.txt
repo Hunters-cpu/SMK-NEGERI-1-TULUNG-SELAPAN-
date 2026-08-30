@@ -1,0 +1,1003 @@
+import React, { useState } from 'react';
+import {
+  Share2,
+  CheckCircle2,
+  Clock,
+  XCircle,
+  AlertTriangle,
+  Send,
+  RefreshCw,
+  Trash2,
+  Settings,
+  FileUp,
+  FileText,
+  Image,
+  Video,
+  Database,
+  Globe,
+  Key,
+  ShieldCheck,
+  HelpCircle,
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  Check,
+  Search,
+  Layers,
+  ArrowRight
+} from 'lucide-react';
+import { useApp } from '../context/AppContext';
+import { SenderConnection, DispatchedFileType, DispatchedFileRecord } from '../types';
+
+export const CrossSiteDispatchPanel: React.FC = () => {
+  const {
+    senderConnections = [],
+    dispatchedFileHistory = [],
+    activeDispatchProgress,
+    requestSenderConnection,
+    checkConnectionStatus,
+    approveSenderConnection,
+    rejectSenderConnection,
+    disconnectSenderConnection,
+    updateSenderConnectionSettings,
+    deleteSenderConnection,
+    retryDispatchFile,
+    dispatchAllExistingFilesToConnection,
+    dispatchFileToActiveConnections,
+    showToast
+  } = useApp();
+
+  // Form State
+  const [targetSiteName, setTargetSiteName] = useState('');
+  const [targetSiteUrl, setTargetSiteUrl] = useState('');
+  const [connectionKey, setConnectionKey] = useState('');
+  const [allowedTypes, setAllowedTypes] = useState<DispatchedFileType[]>(['photo', 'video', 'document']);
+  const [maxFileSizeMb, setMaxFileSizeMb] = useState<number>(500);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [keyValidationError, setKeyValidationError] = useState<string | null>(null);
+
+  // Filter & History state
+  const [historySearch, setHistorySearch] = useState('');
+  const [historyStatusFilter, setHistoryStatusFilter] = useState<'all' | 'sent' | 'failed' | 'pending'>('all');
+  const [showSampleKeys, setShowSampleKeys] = useState(false);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  // Edit connection modal/state
+  const [editingConnection, setEditingConnection] = useState<SenderConnection | null>(null);
+  const [editAllowedTypes, setEditAllowedTypes] = useState<DispatchedFileType[]>([]);
+  const [editMaxFileSizeMb, setEditMaxFileSizeMb] = useState<number>(500);
+
+  // Sample valid receiver keys for easy testing
+  const sampleValidReceiverKeys = [
+    {
+      name: 'Server Pusat Cloud SMAN 1 (1TB)',
+      url: 'https://cloud-vault.sman1nusantara.sch.id/sync',
+      key: 'RCV-SMAN1-CLOUD-VAULT-2026.01-PROD'
+    },
+    {
+      name: 'Server Cadangan Sekolah (Backup 500GB)',
+      url: 'https://backup-server.sman1nusantara.sch.id/receiver',
+      key: 'CONN-CADANGAN-1TB-SERVER-99X'
+    },
+    {
+      name: 'Pusat Arsip & Kenangan Provinsi',
+      url: 'https://arsip-provinsi.kemdikbud.go.id/sekolah',
+      key: 'RCV-ARSIP-PUSAT-PROD-77F8.2026'
+    }
+  ];
+
+  const handleCopyKey = (key: string) => {
+    navigator.clipboard.writeText(key);
+    setCopiedKey(key);
+    setConnectionKey(key);
+    setTimeout(() => setCopiedKey(null), 2500);
+    showToast('Kunci Sambungan disalin & ditempel ke formulir!', 'success');
+  };
+
+  const handleToggleType = (type: DispatchedFileType) => {
+    if (type === 'all') {
+      if (allowedTypes.includes('all')) {
+        setAllowedTypes(['photo', 'video', 'document']);
+      } else {
+        setAllowedTypes(['all', 'photo', 'video', 'document']);
+      }
+      return;
+    }
+
+    if (allowedTypes.includes(type)) {
+      const filtered = allowedTypes.filter(t => t !== type && t !== 'all');
+      setAllowedTypes(filtered.length === 0 ? ['photo'] : filtered);
+    } else {
+      setAllowedTypes([...allowedTypes, type]);
+    }
+  };
+
+  const handleResetForm = () => {
+    setTargetSiteName('');
+    setTargetSiteUrl('');
+    setConnectionKey('');
+    setAllowedTypes(['photo', 'video', 'document']);
+    setMaxFileSizeMb(500);
+    setKeyValidationError(null);
+  };
+
+  const handleSubmitRequest = (e: React.FormEvent) => {
+    e.preventDefault();
+    setKeyValidationError(null);
+
+    if (!targetSiteName.trim()) {
+      showToast('Nama Situs Tujuan wajib diisi!', 'warning');
+      return;
+    }
+    if (!targetSiteUrl.trim()) {
+      showToast('Alamat Lengkap Situs URL wajib diisi!', 'warning');
+      return;
+    }
+    if (!connectionKey.trim()) {
+      showToast('Kunci Sambungan Utama wajib ditempel!', 'warning');
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    const result = requestSenderConnection({
+      targetSiteName: targetSiteName.trim(),
+      targetSiteUrl: targetSiteUrl.trim(),
+      connectionKey: connectionKey.trim(),
+      allowedFileTypes: allowedTypes,
+      maxFileSizeMb
+    });
+
+    setIsSubmitting(false);
+
+    if (result.success) {
+      handleResetForm();
+    } else {
+      setKeyValidationError(result.message);
+    }
+  };
+
+  // Connected & Pending counts
+  const connectedCount = senderConnections.filter(c => c.status === 'connected').length;
+  const pendingCount = senderConnections.filter(c => c.status === 'pending').length;
+
+  // Filtered history
+  const filteredHistory = dispatchedFileHistory.filter(item => {
+    const matchesSearch =
+      item.fileName.toLowerCase().includes(historySearch.toLowerCase()) ||
+      item.targetSiteName.toLowerCase().includes(historySearch.toLowerCase()) ||
+      item.sourceModule.toLowerCase().includes(historySearch.toLowerCase());
+    const matchesStatus = historyStatusFilter === 'all' || item.status === historyStatusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
+  return (
+    <div id="cross-site-dispatch-container" className="space-y-8">
+      {/* 1. Header Banner & Status Indikator */}
+      <div id="dispatch-header-banner" className="bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 text-white shadow-xl">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 text-cyan-400 text-xs font-semibold uppercase tracking-wider border border-cyan-500/20">
+              <Share2 className="w-3.5 h-3.5" />
+              Sistem Pengiriman Otomatis Antar-Situs
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-white flex items-center gap-3">
+              <span>🔗 Hubungan ke Situs Lain — Pengirim & Pembagi Data</span>
+            </h2>
+            <p className="text-slate-400 text-sm sm:text-base max-w-3xl leading-relaxed">
+              Tempel alamat lengkap & Kunci Sambungan Utama dari situs Penerima. Begitu disetujui Pemilik Tujuan, semua berkas baru yang diunggah akan otomatis mengalir serentak tanpa perlu tombol kirim manual.
+            </p>
+          </div>
+
+          {/* Status Badge Ringkasan */}
+          <div className="bg-slate-950/70 border border-slate-800 p-4 rounded-xl flex flex-col gap-2 min-w-[280px]">
+            <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">Status Sistem Pengiriman:</span>
+            {connectedCount > 0 ? (
+              <div className="flex items-center gap-2.5 text-emerald-400 font-semibold text-sm">
+                <span className="relative flex h-3 w-3">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                </span>
+                <span>🟢 {connectedCount} Sambungan Aktif & Otomatis Mengalir</span>
+              </div>
+            ) : pendingCount > 0 ? (
+              <div className="flex items-center gap-2 text-amber-400 font-medium text-sm">
+                <Clock className="w-4 h-4 animate-spin" />
+                <span>🟡 Menunggu Persetujuan ({pendingCount} Permintaan)</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-slate-400 text-xs sm:text-sm">
+                <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+                <span>⚠️ Belum ada sambungan sah — berkas hanya tersimpan aman di situs ini saja</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 2. FORM KIRIM PERMINTAAN SAMBUNGAN BARU */}
+      <div id="dispatch-request-form-card" className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 sm:p-8 shadow-sm">
+        <div className="border-b border-slate-200 dark:border-slate-800 pb-5 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h3 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <Send className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+              ➕ Kirim Permintaan Sambungan Baru — Isi Semua Wajib
+            </h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+              Kunci Sambungan HANYA dibuat & diperoleh dari situs Penerima. Sisi Pengirim tidak bisa membuat kunci sendiri.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            id="toggle-sample-keys-btn"
+            onClick={() => setShowSampleKeys(!showSampleKeys)}
+            className="inline-flex items-center gap-2 text-xs font-semibold px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors self-start sm:self-auto"
+          >
+            <Key className="w-3.5 h-3.5 text-indigo-500" />
+            <span>{showSampleKeys ? 'Sembunyikan Contoh Kunci' : '📋 Lihat Contoh Kunci Sah Penerima'}</span>
+            {showSampleKeys ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          </button>
+        </div>
+
+        {/* Expandable Sample Keys Helper */}
+        {showSampleKeys && (
+          <div id="sample-receiver-keys-box" className="mb-6 p-4 bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 rounded-xl space-y-3">
+            <div className="flex items-center gap-2 text-indigo-900 dark:text-indigo-200 font-semibold text-sm">
+              <ShieldCheck className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              <span>Contoh Kunci Sambungan Sah dari Situs Penerima Terdaftar:</span>
+            </div>
+            <p className="text-xs text-slate-600 dark:text-slate-300">
+              Gunakan salah satu kunci terdaftar di bawah ini untuk simulasi / penyambungan langsung. Salin persis tanpa mengubah satu karakter pun:
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+              {sampleValidReceiverKeys.map((item, idx) => (
+                <div key={idx} className="p-3 bg-white dark:bg-slate-900 border border-indigo-100 dark:border-slate-800 rounded-lg flex flex-col justify-between gap-2 shadow-sm">
+                  <div>
+                    <p className="font-semibold text-xs text-slate-900 dark:text-white line-clamp-1">{item.name}</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">{item.url}</p>
+                    <code className="block mt-2 text-[11px] bg-slate-100 dark:bg-slate-800 p-1.5 rounded font-mono text-indigo-700 dark:text-indigo-300 break-all select-all">
+                      {item.key}
+                    </code>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTargetSiteName(item.name);
+                      setTargetSiteUrl(item.url);
+                      handleCopyKey(item.key);
+                    }}
+                    className="inline-flex items-center justify-center gap-1.5 text-xs font-semibold py-1.5 px-2.5 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white transition-colors mt-1"
+                  >
+                    {copiedKey === item.key ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedKey === item.key ? 'Tersalin & Ditempel' : 'Gunakan & Salin Kunci'}</span>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmitRequest} className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Nama Situs Tujuan */}
+            <div>
+              <label className="block text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1.5">
+                Nama Situs Tujuan: <span className="text-red-500">*</span>
+              </label>
+              <input
+                id="input-target-site-name"
+                type="text"
+                value={targetSiteName}
+                onChange={e => setTargetSiteName(e.target.value)}
+                placeholder="Contoh: Penyimpanan Cloud 1TB / Server Cadangan SMAN 1"
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm transition-all"
+                required
+              />
+            </div>
+
+            {/* Alamat Lengkap Situs URL */}
+            <div>
+              <label className="block text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1.5">
+                Alamat Lengkap Situs URL: <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <Globe className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+                <input
+                  id="input-target-site-url"
+                  type="text"
+                  value={targetSiteUrl}
+                  onChange={e => setTargetSiteUrl(e.target.value)}
+                  placeholder="https://server-tujuan.sch.id/penerima"
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm font-mono transition-all"
+                  required
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Kunci Sambungan Utama */}
+          <div>
+            <label className="block text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1.5">
+              🔑 Kunci Sambungan Utama: <span className="text-red-500">*</span>
+            </label>
+            <div className="relative">
+              <Key className="w-4 h-4 text-indigo-500 absolute left-3.5 top-3.5" />
+              <input
+                id="input-connection-key"
+                type="text"
+                value={connectionKey}
+                onChange={e => {
+                  setConnectionKey(e.target.value);
+                  if (keyValidationError) setKeyValidationError(null);
+                }}
+                placeholder="Tempel Kunci Sambungan persis yang disalin dari situs Penerima..."
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-indigo-500 focus:outline-none font-mono text-sm tracking-wide transition-all"
+                required
+              />
+            </div>
+
+            {/* Strict Notice Box */}
+            <div className="mt-2.5 p-3.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl text-xs text-amber-900 dark:text-amber-200 space-y-1">
+              <div className="font-semibold flex items-center gap-1.5">
+                <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                <span>⚠️ PERATURAN PENTING KUNCI SAMBUNGAN:</span>
+              </div>
+              <p className="leading-relaxed pl-5 text-amber-800 dark:text-amber-300">
+                SALIN PERSIS dari halaman Sambungan situs TUJUAN — SEMUA huruf besar/kecil, tanda hubung, garis miring & titik HARUS SAMA PERSIS. Beda satu karakter saja = langsung ditolak otomatis. Sisi Pengirim TIDAK BISA membuat kunci sendiri.
+              </p>
+            </div>
+
+            {/* Error Display */}
+            {keyValidationError && (
+              <div className="mt-2 p-3 bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-800 rounded-xl text-xs text-red-700 dark:text-red-300 font-medium flex items-center gap-2">
+                <XCircle className="w-4 h-4 text-red-600 shrink-0" />
+                <span>{keyValidationError}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Opsi Pengiriman: Jenis Berkas & Batas Ukuran */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+            <div>
+              <label className="block text-sm font-semibold text-slate-800 dark:text-slate-200 mb-2">
+                Izinkan Kirim Otomatis:
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { key: 'photo', label: 'Foto', icon: Image },
+                  { key: 'video', label: 'Video', icon: Video },
+                  { key: 'document', label: 'Dokumen', icon: FileText },
+                  { key: 'all', label: 'Semua', icon: Layers }
+                ].map(opt => {
+                  const Icon = opt.icon;
+                  const isChecked = opt.key === 'all' ? allowedTypes.length === 3 || allowedTypes.includes('all') : allowedTypes.includes(opt.key as DispatchedFileType);
+                  return (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      onClick={() => handleToggleType(opt.key as DispatchedFileType)}
+                      className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all ${
+                        isChecked
+                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                          : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+                      }`}
+                    >
+                      <Icon className="w-3.5 h-3.5" />
+                      <span>{opt.label}</span>
+                      {isChecked && <Check className="w-3 h-3 ml-0.5" />}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-slate-800 dark:text-slate-200 mb-2">
+                Batas Ukuran Tiap Berkas:
+              </label>
+              <div className="flex items-center gap-3">
+                <select
+                  value={maxFileSizeMb}
+                  onChange={e => setMaxFileSizeMb(Number(e.target.value))}
+                  className="px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                >
+                  <option value={100}>100 MB</option>
+                  <option value={250}>250 MB</option>
+                  <option value={500}>500 MB (Standar Maksimal)</option>
+                  <option value={1024}>1 GB (1024 MB)</option>
+                  <option value={2048}>2 GB (2048 MB)</option>
+                </select>
+                <span className="text-xs text-slate-500 dark:text-slate-400">Berkas melebihi batas akan ditahan otomatis</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="pt-4 flex flex-col sm:flex-row items-center gap-3 border-t border-slate-100 dark:border-slate-800">
+            <button
+              id="submit-dispatch-request-btn"
+              type="submit"
+              disabled={isSubmitting}
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm shadow-md hover:shadow-lg transition-all disabled:opacity-50"
+            >
+              <Send className="w-4 h-4" />
+              <span>{isSubmitting ? 'Memeriksa & Mengirim…' : '📤 KIRIM PERMINTAAN SAMBUNGAN'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleResetForm}
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-sm transition-all"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>📋 KOSONGKAN SEMUA</span>
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* 3. DAFTAR TUJUAN & STATUS SAMBUNGAN SAYA */}
+      <div id="dispatch-connections-list-card" className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 sm:p-8 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 border-b border-slate-200 dark:border-slate-800 pb-5">
+          <div>
+            <h3 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <Database className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+              📋 Daftar Tujuan & Status Sambungan Saya ({senderConnections.length})
+            </h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+              Pantau status izin dari Pemilik Tujuan, ubah pengaturan kirim, atau putuskan sambungan kapan saja.
+            </p>
+          </div>
+        </div>
+
+        {senderConnections.length === 0 ? (
+          /* Empty State */
+          <div id="empty-connections-state" className="p-8 sm:p-12 text-center border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl bg-slate-50/50 dark:bg-slate-950/50 space-y-4">
+            <div className="w-16 h-16 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 mx-auto flex items-center justify-center">
+              <Share2 className="w-8 h-8" />
+            </div>
+            <div className="space-y-2 max-w-md mx-auto">
+              <h4 className="text-lg font-bold text-slate-800 dark:text-white">📭 Belum Ada Tujuan Terhubung</h4>
+              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                Setelah permintaan dikirim & Kunci Sambungan diverifikasi:
+              </p>
+              <div className="text-left bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 text-xs space-y-2 text-slate-700 dark:text-slate-300">
+                <p className="flex items-center gap-2">
+                  <span className="inline-block w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+                  <span className="font-semibold text-amber-600 dark:text-amber-400">🟡 MENUNGGU PERSETUJUAN</span> — kunci sudah cocok, menunggu pemilik
+                </p>
+                <p className="flex items-center gap-2">
+                  <span className="inline-block w-2.5 h-2.5 rounded-full bg-slate-500"></span>
+                  <span className="font-semibold text-slate-600 dark:text-slate-400">⚫ DITOLAK / TIDAK SAH</span> — kunci salah / pemilik tolak permintaan
+                </p>
+                <p className="flex items-center gap-2">
+                  <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                  <span className="font-semibold text-emerald-600 dark:text-emerald-400">🟢 TERHUBUNG & AKTIF ✅</span> — disetujui, berkas mengalir sendiri
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* List of Connections */
+          <div className="grid grid-cols-1 gap-5">
+            {senderConnections.map(conn => {
+              const isConnected = conn.status === 'connected';
+              const isPending = conn.status === 'pending';
+              const isRejected = conn.status === 'rejected' || conn.status === 'invalid_key';
+
+              return (
+                <div
+                  key={conn.id}
+                  id={`connection-card-${conn.id}`}
+                  className={`p-5 sm:p-6 rounded-2xl border transition-all ${
+                    isConnected
+                      ? 'bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/60 shadow-sm'
+                      : isPending
+                      ? 'bg-amber-50/40 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800/60 shadow-sm'
+                      : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800'
+                  }`}
+                >
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                    {/* Destination details */}
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap items-center gap-2.5">
+                        <span className="font-bold text-base sm:text-lg text-slate-900 dark:text-white flex items-center gap-2">
+                          {isConnected && <span className="inline-block w-3 h-3 rounded-full bg-emerald-500"></span>}
+                          {isPending && <span className="inline-block w-3 h-3 rounded-full bg-amber-500 animate-pulse"></span>}
+                          {isRejected && <span className="inline-block w-3 h-3 rounded-full bg-slate-500"></span>}
+                          {conn.targetSiteName}
+                        </span>
+
+                        {isConnected && (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            TERHUBUNG & AKTIF ✅
+                          </span>
+                        )}
+
+                        {isPending && (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300">
+                            <Clock className="w-3.5 h-3.5" />
+                            MENUNGGU PERSETUJUAN
+                          </span>
+                        )}
+
+                        {isRejected && (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-800 dark:bg-red-900/60 dark:text-red-300">
+                            <XCircle className="w-3.5 h-3.5" />
+                            DITOLAK / TIDAK SAH
+                          </span>
+                        )}
+                      </div>
+
+                      <p className="text-xs text-slate-500 dark:text-slate-400 font-mono flex items-center gap-1.5">
+                        <Globe className="w-3.5 h-3.5" />
+                        <span>{conn.targetSiteUrl}</span>
+                      </p>
+
+                      {/* Connection metadata */}
+                      <div className="text-xs text-slate-600 dark:text-slate-300 space-y-1 pt-1">
+                        {isConnected && (
+                          <>
+                            <p className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400 font-medium">
+                              <span>↳ Terakhir dikirim:</span>
+                              <span className="font-semibold">{conn.lastDispatchedFileName || 'Menunggu berkas baru diunggah'}</span>
+                              {conn.lastDispatchedAt && <span>• {new Date(conn.lastDispatchedAt).toLocaleTimeString('id-ID')}</span>}
+                            </p>
+                            <p className="text-slate-500 dark:text-slate-400">
+                              ↳ Jenis diizinkan: <span className="font-semibold text-slate-700 dark:text-slate-300">{conn.allowedFileTypes.join(', ')}</span> • Batas: <span className="font-semibold text-slate-700 dark:text-slate-300">{conn.maxFileSizeMb} MB</span>
+                            </p>
+                          </>
+                        )}
+
+                        {isPending && (
+                          <div className="space-y-1">
+                            <p className="text-amber-700 dark:text-amber-300 font-medium">
+                              ⏳ Dikirim: {new Date(conn.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} • Pemeriksaan Kunci: <span className="text-emerald-600 dark:text-emerald-400 font-bold">✅ COCOK</span>
+                            </p>
+                            <p className="text-slate-500 dark:text-slate-400">
+                              Status: <span className="italic">{conn.statusMessage || 'Menunggu respon dari Pemilik Situs Tujuan…'}</span>
+                            </p>
+                          </div>
+                        )}
+
+                        {isRejected && (
+                          <p className="text-red-600 dark:text-red-400 font-medium">
+                            ⚠️ Alasan: {conn.rejectionReason || 'Kunci sambungan tidak sah atau ditolak oleh pemilik tujuan.'}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Action buttons per connection */}
+                    <div className="flex flex-wrap items-center gap-2 pt-2 lg:pt-0">
+                      {isPending && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              showToast('Memeriksa status respon Pemilik Tujuan…', 'info');
+                              await checkConnectionStatus(conn.id);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold shadow-sm transition-all"
+                          >
+                            <RefreshCw className="w-3.5 h-3.5" />
+                            <span>🔄 CEK STATUS SEKARANG</span>
+                          </button>
+
+                          {/* Quick Interactive Approval Simulation for Testing */}
+                          <div className="flex items-center gap-1 bg-white dark:bg-slate-800 p-1 rounded-xl border border-amber-200 dark:border-amber-800 text-xs">
+                            <span className="text-[11px] px-1.5 font-medium text-slate-500">Respon Pemilik:</span>
+                            <button
+                              type="button"
+                              onClick={() => approveSenderConnection(conn.id)}
+                              className="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-colors"
+                              title="Simulasi Pemilik Menyetujui Sambungan"
+                            >
+                              ✅ Setuju
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => rejectSenderConnection(conn.id, 'Ditolak oleh pemilik tujuan saat peninjauan.')}
+                              className="px-2 py-1 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold text-xs transition-colors"
+                              title="Simulasi Pemilik Menolak Sambungan"
+                            >
+                              ❌ Tolak
+                            </button>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => deleteSenderConnection(conn.id)}
+                            className="inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-red-100 hover:text-red-700 dark:hover:bg-red-950/60 dark:hover:text-red-400 text-slate-700 dark:text-slate-300 text-xs font-semibold transition-all"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>🗑️ BATALKAN</span>
+                          </button>
+                        </>
+                      )}
+
+                      {isConnected && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingConnection(conn);
+                              setEditAllowedTypes(conn.allowedFileTypes);
+                              setEditMaxFileSizeMb(conn.maxFileSizeMb);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-semibold transition-all"
+                          >
+                            <Settings className="w-3.5 h-3.5" />
+                            <span>⚙️ PENGATURAN</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => dispatchAllExistingFilesToConnection(conn.id)}
+                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-sm transition-all"
+                            title="Kirim semua berkas media lama yang ada ke situs ini"
+                          >
+                            <FileUp className="w-3.5 h-3.5" />
+                            <span>📤 SEBARKAN BERKAS LAMA</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => disconnectSenderConnection(conn.id)}
+                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 dark:hover:bg-amber-900 text-xs font-semibold transition-all"
+                            title="Hentikan pengiriman berkas baru (berkas yang sudah terkirim tetap aman)"
+                          >
+                            <span>🔗 PUTUSKAN</span>
+                          </button>
+                        </>
+                      )}
+
+                      {isRejected && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTargetSiteName(conn.targetSiteName);
+                              setTargetSiteUrl(conn.targetSiteUrl);
+                              setConnectionKey('');
+                              deleteSenderConnection(conn.id);
+                              showToast('Silakan tempel Kunci Sambungan yang baru pada formulir di atas', 'info');
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition-all"
+                          >
+                            <RefreshCw className="w-3.5 h-3.5" />
+                            <span>🔄 COBA ULANG</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => deleteSenderConnection(conn.id)}
+                            className="inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold hover:bg-red-100 hover:text-red-700 dark:hover:bg-red-950/60 dark:hover:text-red-400 transition-all"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>HAPUS</span>
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* 4. SAAT MENGUNGGAH & SIMPAN BERKAS — OTOMATIS BERJALAN SENDIRI (LIVE SIMULATION & STATUS) */}
+      <div id="dispatch-live-flow-card" className="bg-slate-950 border border-slate-800 rounded-2xl p-6 sm:p-8 text-white shadow-lg space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h3 className="text-xl font-bold text-white flex items-center gap-2">
+              <FileUp className="w-5 h-5 text-emerald-400" />
+              📤 Saat Mengunggah & Simpan Berkas — Otomatis Berjalan Sendiri
+            </h3>
+            <p className="text-xs sm:text-sm text-slate-400 mt-1">
+              Setiap kali ada yang mengunggah foto, video, atau dokumen di galeri kelas, ekskul, atau pengumuman:
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={async () => {
+              await dispatchFileToActiveConnections({
+                fileName: `Foto_Kegiatan_Upacara_${Date.now().toString().substring(8)}.jpg`,
+                fileType: 'photo',
+                fileSizeBytes: 4.2 * 1024 * 1024,
+                sourceModule: 'Galeri Kegiatan Sekolah'
+              });
+            }}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition-all shadow-md self-start sm:self-auto"
+          >
+            <Send className="w-3.5 h-3.5" />
+            <span>⚡ Uji Coba Unggah & Simpan Berkas Baru</span>
+          </button>
+        </div>
+
+        {/* Real-time Dispatch Progress View */}
+        <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 sm:p-5 space-y-4 font-mono text-xs sm:text-sm">
+          <div className="flex items-center gap-2 text-emerald-400 font-semibold">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>✅ Tersimpan aman di situs ini! Menyebar ke sambungan aktif…</span>
+          </div>
+
+          {senderConnections.length === 0 ? (
+            <p className="text-slate-500 pl-6 italic">
+              ↳ Tidak ada sambungan aktif — berkas disimpan di server ini saja.
+            </p>
+          ) : (
+            <div className="space-y-2.5 pl-6 border-l border-slate-800 ml-2">
+              {senderConnections.map((conn, idx) => {
+                const isLast = idx === senderConnections.length - 1;
+                const isConnActive = conn.status === 'connected';
+
+                return (
+                  <div key={conn.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-slate-300">
+                    <div className="flex items-center gap-2">
+                      <span className="text-slate-600">{isLast ? '└→' : '├→'}</span>
+                      <span className="font-semibold text-white">{conn.targetSiteName}</span>
+                    </div>
+
+                    {isConnActive ? (
+                      <div className="flex items-center gap-3">
+                        <div className="w-28 sm:w-36 bg-slate-800 rounded-full h-2 overflow-hidden">
+                          <div className="bg-emerald-500 h-full rounded-full w-full"></div>
+                        </div>
+                        <span className="text-emerald-400 font-bold text-xs">100% ✅ TERKIRIM</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 text-amber-400 text-xs">
+                        <Clock className="w-3.5 h-3.5" />
+                        <span>⏳ Belum disetujui → ditunda sementara</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <p className="text-[11px] text-slate-500 pt-2 border-t border-slate-800">
+            Selesai — TIDAK PERLU tombol “Kirim” atau konfirmasi tambahan lagi!
+          </p>
+        </div>
+      </div>
+
+      {/* 5. RIWAYAT PENGIRIMAN OTOMATIS */}
+      <div id="dispatch-history-card" className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 sm:p-8 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 border-b border-slate-200 dark:border-slate-800 pb-5">
+          <div>
+            <h3 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <Clock className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+              📋 Riwayat Pengiriman Otomatis ({dispatchedFileHistory.length})
+            </h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+              Catatan nama berkas, ukuran, asal modul, dan status pengiriman ke tiap situs tujuan.
+            </p>
+          </div>
+
+          {/* Search & Filter */}
+          {dispatchedFileHistory.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2.5">
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  value={historySearch}
+                  onChange={e => setHistorySearch(e.target.value)}
+                  placeholder="Cari berkas / tujuan…"
+                  className="pl-9 pr-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <select
+                value={historyStatusFilter}
+                onChange={e => setHistoryStatusFilter(e.target.value as any)}
+                className="py-1.5 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs text-slate-900 dark:text-white focus:outline-none"
+              >
+                <option value="all">Semua Status</option>
+                <option value="sent">✅ Berhasil Terkirim</option>
+                <option value="failed">❌ Gagal</option>
+                <option value="pending">⏳ Tertunda</option>
+              </select>
+            </div>
+          )}
+        </div>
+
+        {dispatchedFileHistory.length === 0 ? (
+          /* Empty History */
+          <div id="empty-history-state" className="p-8 sm:p-12 text-center border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl bg-slate-50/50 dark:bg-slate-950/50 space-y-3">
+            <div className="w-14 h-14 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-400 mx-auto flex items-center justify-center">
+              <FileText className="w-7 h-7" />
+            </div>
+            <h4 className="text-base font-bold text-slate-800 dark:text-white">📭 Belum Ada Berkas yang Dikirim</h4>
+            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto leading-relaxed">
+              Setelah sambungan sah & berkas diunggah: nama berkas, ukuran, asal modul, tujuan pengiriman, dan hasil berhasil/gagal akan muncul otomatis di sini.
+            </p>
+          </div>
+        ) : filteredHistory.length === 0 ? (
+          <div className="p-6 text-center text-slate-500 text-sm">
+            Tidak ada riwayat pengiriman yang cocok dengan pencarian.
+          </div>
+        ) : (
+          /* History Table */
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs sm:text-sm border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400">
+                  <th className="py-3 px-4 font-semibold">Nama Berkas</th>
+                  <th className="py-3 px-4 font-semibold">Ukuran</th>
+                  <th className="py-3 px-4 font-semibold">Asal Modul</th>
+                  <th className="py-3 px-4 font-semibold">Tujuan Situs</th>
+                  <th className="py-3 px-4 font-semibold">Waktu</th>
+                  <th className="py-3 px-4 font-semibold">Status</th>
+                  <th className="py-3 px-4 font-semibold text-right">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
+                {filteredHistory.map(rec => (
+                  <tr key={rec.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                    <td className="py-3 px-4 font-semibold text-slate-900 dark:text-white">
+                      <div className="flex items-center gap-2">
+                        {rec.fileType === 'photo' && <Image className="w-4 h-4 text-sky-500 shrink-0" />}
+                        {rec.fileType === 'video' && <Video className="w-4 h-4 text-purple-500 shrink-0" />}
+                        {rec.fileType === 'document' && <FileText className="w-4 h-4 text-emerald-500 shrink-0" />}
+                        <span className="truncate max-w-[200px] sm:max-w-xs">{rec.fileName}</span>
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 text-slate-500 font-mono text-xs">{rec.fileSizeFormatted}</td>
+                    <td className="py-3 px-4 text-slate-600 dark:text-slate-300">{rec.sourceModule}</td>
+                    <td className="py-3 px-4 font-medium text-slate-900 dark:text-white">{rec.targetSiteName}</td>
+                    <td className="py-3 px-4 text-slate-500 text-xs">
+                      {new Date(rec.dispatchedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                    </td>
+                    <td className="py-3 px-4">
+                      {rec.status === 'sent' && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300">
+                          <Check className="w-3 h-3" />
+                          TERKIRIM
+                        </span>
+                      )}
+                      {rec.status === 'failed' && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-800 dark:bg-red-900/60 dark:text-red-300" title={rec.statusDetail}>
+                          <XCircle className="w-3 h-3" />
+                          GAGAL
+                        </span>
+                      )}
+                      {rec.status === 'pending' && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300">
+                          <Clock className="w-3 h-3" />
+                          TERTUNDA
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      {rec.status === 'failed' && (
+                        <button
+                          type="button"
+                          onClick={() => retryDispatchFile(rec.id)}
+                          className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100"
+                        >
+                          <RefreshCw className="w-3 h-3" />
+                          Kirim Ulang
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* MODAL EDIT PENGATURAN SAMBUNGAN */}
+      {editingConnection && (
+        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full p-6 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-5 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
+              <h4 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Settings className="w-5 h-5 text-indigo-600" />
+                <span>Pengaturan Sambungan: {editingConnection.targetSiteName}</span>
+              </h4>
+              <button
+                type="button"
+                onClick={() => setEditingConnection(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">
+                  Jenis Berkas yang Boleh Dikirim Otomatis:
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { key: 'photo', label: 'Foto', icon: Image },
+                    { key: 'video', label: 'Video', icon: Video },
+                    { key: 'document', label: 'Dokumen', icon: FileText }
+                  ].map(opt => {
+                    const Icon = opt.icon;
+                    const isChecked = editAllowedTypes.includes(opt.key as DispatchedFileType);
+                    return (
+                      <button
+                        key={opt.key}
+                        type="button"
+                        onClick={() => {
+                          if (isChecked) {
+                            const filtered = editAllowedTypes.filter(t => t !== opt.key);
+                            setEditAllowedTypes(filtered.length === 0 ? ['photo'] : filtered);
+                          } else {
+                            setEditAllowedTypes([...editAllowedTypes, opt.key as DispatchedFileType]);
+                          }
+                        }}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border ${
+                          isChecked
+                            ? 'bg-indigo-600 text-white border-indigo-600'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700'
+                        }`}
+                      >
+                        <Icon className="w-3 h-3" />
+                        <span>{opt.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Batas Ukuran Tiap Berkas:
+                </label>
+                <select
+                  value={editMaxFileSizeMb}
+                  onChange={e => setEditMaxFileSizeMb(Number(e.target.value))}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-white text-xs"
+                >
+                  <option value={100}>100 MB</option>
+                  <option value={250}>250 MB</option>
+                  <option value={500}>500 MB (Standar)</option>
+                  <option value={1024}>1 GB</option>
+                  <option value={2048}>2 GB</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setEditingConnection(null)}
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  updateSenderConnectionSettings(editingConnection.id, {
+                    allowedFileTypes: editAllowedTypes,
+                    maxFileSizeMb: editMaxFileSizeMb
+                  });
+                  setEditingConnection(null);
+                }}
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-xs font-semibold text-white"
+              >
+                Simpan Perubahan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+export default CrossSiteDispatchPanel;

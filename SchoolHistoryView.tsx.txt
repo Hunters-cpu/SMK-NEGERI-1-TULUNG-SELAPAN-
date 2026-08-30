@@ -1,0 +1,464 @@
+import React, { useState } from 'react';
+import { useApp } from '../context/AppContext';
+import { HistoryEvent, OldArchivePhoto } from '../types';
+import { 
+  History, 
+  Camera, 
+  Heart, 
+  Plus, 
+  Edit3, 
+  Trash2, 
+  Sparkles, 
+  Calendar, 
+  Building2, 
+  Search, 
+  Layers, 
+  CheckCircle,
+  X
+} from 'lucide-react';
+import { MediaUploadField } from '../components/MediaUploadField';
+
+export const SchoolHistoryView: React.FC = () => {
+  const { 
+    schoolInfo, 
+    historyEvents, 
+    addHistoryEvent, 
+    updateHistoryEvent, 
+    deleteHistoryEvent, 
+    oldArchivePhotos, 
+    addOldArchivePhoto, 
+    deleteOldArchivePhoto, 
+    toggleOldArchivePhotoLike,
+    authSession,
+    requestDeleteConfirm,
+    hasAdminScope
+  } = useApp();
+
+  const [activeTab, setActiveTab] = useState<'timeline' | 'old_photos'>('timeline');
+
+  // History Event Modal
+  const [isHistModalOpen, setIsHistModalOpen] = useState<boolean>(false);
+  const [editingHist, setEditingHist] = useState<HistoryEvent | null>(null);
+  const [histForm, setHistForm] = useState({
+    year: new Date().getFullYear(),
+    title: '',
+    description: '',
+    photoUrl: ''
+  });
+
+  // Old Photo Modal
+  const [isPhotoModalOpen, setIsPhotoModalOpen] = useState<boolean>(false);
+  const [photoForm, setPhotoForm] = useState({
+    title: '',
+    estimatedYear: '1995',
+    photoUrl: '',
+    story: '',
+    uploaderName: 'Arsip Sekolah'
+  });
+
+  const canManageHist = hasAdminScope('history') || authSession.role === 'super_admin';
+  const canManagePhoto = hasAdminScope('old_archive') || authSession.role === 'super_admin';
+
+  // Sorted timeline
+  const sortedHistory = [...historyEvents].sort((a, b) => a.year - b.year);
+
+  // History Handlers
+  const handleOpenAddHist = () => {
+    setEditingHist(null);
+    setHistForm({
+      year: 2000,
+      title: '',
+      description: '',
+      photoUrl: ''
+    });
+    setIsHistModalOpen(true);
+  };
+
+  const handleOpenEditHist = (item: HistoryEvent) => {
+    setEditingHist(item);
+    setHistForm({
+      year: item.year,
+      title: item.title,
+      description: item.description,
+      photoUrl: item.photoUrl || ''
+    });
+    setIsHistModalOpen(true);
+  };
+
+  const handleSaveHist = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!histForm.title.trim()) return;
+
+    if (editingHist) {
+      updateHistoryEvent(editingHist.id, {
+        year: Number(histForm.year),
+        title: histForm.title.trim(),
+        description: histForm.description.trim(),
+        photoUrl: histForm.photoUrl.trim() || undefined
+      });
+    } else {
+      addHistoryEvent({
+        year: Number(histForm.year),
+        title: histForm.title.trim(),
+        description: histForm.description.trim(),
+        photoUrl: histForm.photoUrl.trim() || undefined
+      });
+    }
+    setIsHistModalOpen(false);
+  };
+
+  const handleDeleteHist = (item: HistoryEvent) => {
+    requestDeleteConfirm({
+      itemName: `Peristiwa Sejarah "${item.title}" (${item.year})`,
+      message: `Hapus catatan sejarah tahun ${item.year}?`,
+      onConfirm: () => deleteHistoryEvent(item.id)
+    });
+  };
+
+  // Photo Handlers
+  const handleOpenAddPhoto = () => {
+    setPhotoForm({
+      title: '',
+      estimatedYear: '1990',
+      photoUrl: '',
+      story: '',
+      uploaderName: authSession.name || 'Arsip Sekolah'
+    });
+    setIsPhotoModalOpen(true);
+  };
+
+  const handleSavePhoto = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!photoForm.title.trim() || !photoForm.photoUrl.trim()) return;
+
+    addOldArchivePhoto({
+      title: photoForm.title.trim(),
+      estimatedYear: photoForm.estimatedYear.trim(),
+      photoUrl: photoForm.photoUrl.trim(),
+      story: photoForm.story.trim(),
+      uploaderName: photoForm.uploaderName.trim()
+    });
+
+    setIsPhotoModalOpen(false);
+  };
+
+  const handleDeletePhoto = (photo: OldArchivePhoto) => {
+    requestDeleteConfirm({
+      itemName: `Foto Tempo Dulu "${photo.title}"`,
+      message: `Hapus foto arsip lawas ini?`,
+      onConfirm: () => deleteOldArchivePhoto(photo.id)
+    });
+  };
+
+  return (
+    <div className="space-y-8 pb-20 animate-fade-in">
+      {/* Header Banner */}
+      <div className="relative overflow-hidden bg-gradient-to-br from-[#5A5A40] via-[#3E3E2C] to-[#2B2B1E] text-white p-6 sm:p-10 rounded-[32px] shadow-lg">
+        <div className="relative z-10 max-w-3xl space-y-3">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1 bg-white/20 backdrop-blur-md rounded-full text-xs font-bold uppercase tracking-widest text-amber-200">
+            <History className="w-4 h-4" />
+            <span>Menu 10 & 11: Sejarah & Foto Tempo Dulu</span>
+          </div>
+          <h1 className="font-serif text-2xl sm:text-4xl font-bold tracking-tight">
+            Nostalgia & Jejak Sejarah Sekolah
+          </h1>
+          <p className="text-sm sm:text-base text-white/85 leading-relaxed">
+            Menelusuri perjalanan panjang berdirinya sekolah dari masa ke masa, kepemimpinan kepala sekolah terdahulu, dan koleksi foto lawas penuh kenangan klasik.
+          </p>
+
+          {/* Sub Navigation Tabs */}
+          <div className="pt-2 flex items-center gap-3">
+            <button
+              onClick={() => setActiveTab('timeline')}
+              className={`px-4 py-2 rounded-2xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+                activeTab === 'timeline'
+                  ? 'bg-amber-400 text-[#2D2D2A] shadow-md'
+                  : 'bg-white/20 text-white hover:bg-white/30'
+              }`}
+            >
+              ⏳ Linimasa Sejarah
+            </button>
+            <button
+              onClick={() => setActiveTab('old_photos')}
+              className={`px-4 py-2 rounded-2xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+                activeTab === 'old_photos'
+                  ? 'bg-amber-400 text-[#2D2D2A] shadow-md'
+                  : 'bg-white/20 text-white hover:bg-white/30'
+              }`}
+            >
+              🏛️ Foto Tempo Dulu ({oldArchivePhotos.length})
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Tab 1: Linimasa Sejarah */}
+      {activeTab === 'timeline' ? (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <h3 className="font-serif text-lg font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">
+              Tonggak Sejarah Perkembangan Sekolah
+            </h3>
+            {canManageHist && (
+              <button
+                onClick={handleOpenAddHist}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-[#5A5A40] hover:bg-[#484833] text-white font-bold rounded-xl text-xs shadow-sm cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Tambah Peristiwa Sejarah</span>
+              </button>
+            )}
+          </div>
+
+          <div className="relative pl-6 sm:pl-8 border-l-2 border-[#5A5A40]/40 space-y-8 my-6">
+            {sortedHistory.map((item, index) => (
+              <div key={item.id} className="relative group">
+                {/* Year Marker Dot */}
+                <div className="absolute -left-[31px] sm:-left-[39px] top-1.5 w-6 h-6 rounded-full bg-[#5A5A40] text-white flex items-center justify-center text-[10px] font-bold ring-4 ring-white dark:ring-[#121211] shadow-md">
+                  {index + 1}
+                </div>
+
+                <div className="bg-white dark:bg-[#1E1E1C] p-6 rounded-[24px] border border-[#E0E0D8] dark:border-[#383832] shadow-sm space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="px-3 py-1 bg-[#5A5A40] text-white text-xs font-mono font-bold rounded-xl shadow-xs">
+                      Tahun {item.year}
+                    </span>
+                    {canManageHist && (
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleOpenEditHist(item)}
+                          className="p-1 text-xs text-[#5A5A40] dark:text-[#D1D1BE] hover:underline font-semibold cursor-pointer"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDeleteHist(item)}
+                          className="p-1 text-xs text-rose-600 hover:underline font-semibold cursor-pointer"
+                        >
+                          Hapus
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  <h3 className="font-serif text-lg font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">
+                    {item.title}
+                  </h3>
+
+                  <p className="text-xs sm:text-sm text-[#5A5A40] dark:text-[#C5C5B0] leading-relaxed">
+                    {item.description}
+                  </p>
+
+                  {item.photoUrl && (
+                    <div className="mt-3 rounded-2xl overflow-hidden max-w-md aspect-[16/9] border border-[#E0E0D8] dark:border-[#383832]">
+                      <img src={item.photoUrl} alt={item.title} className="w-full h-full object-cover" />
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        /* Tab 2: Foto Tempo Dulu (Sepia Nostalgia) */
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-serif text-lg font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">
+                Galeri Arsip Foto Jadul & Klasik
+              </h3>
+              <p className="text-xs text-[#8E8E85]">Koleksi kenangan potret masa lampau dengan efek sepia nostalgia.</p>
+            </div>
+            {canManagePhoto && (
+              <button
+                onClick={handleOpenAddPhoto}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-[#5A5A40] hover:bg-[#484833] text-white font-bold rounded-xl text-xs shadow-sm cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Unggah Foto Lawas</span>
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {oldArchivePhotos.map(photo => (
+              <div
+                key={photo.id}
+                className="bg-white dark:bg-[#1E1E1C] rounded-[24px] border border-[#E0E0D8] dark:border-[#383832] shadow-sm overflow-hidden flex flex-col justify-between group"
+              >
+                <div>
+                  {/* Photo with Vintage Filter */}
+                  <div className="relative aspect-[4/3] w-full overflow-hidden bg-neutral-900">
+                    <img
+                      src={photo.photoUrl}
+                      alt={photo.title}
+                      className="w-full h-full object-cover sepia-50 contrast-110 group-hover:scale-105 transition-transform duration-500"
+                    />
+                    <div className="absolute top-3 left-3 px-3 py-1 bg-amber-950/80 backdrop-blur-xs text-amber-200 text-[10px] font-mono font-bold rounded-full">
+                      Tahun ~{photo.estimatedYear}
+                    </div>
+                  </div>
+
+                  <div className="p-5 space-y-2">
+                    <h4 className="font-serif text-base font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">
+                      {photo.title}
+                    </h4>
+                    <p className="text-xs text-[#5A5A40] dark:text-[#A4A485] leading-relaxed">
+                      {photo.story}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-[#F8F8F5] dark:bg-[#282825] border-t border-[#E0E0D8]/60 dark:border-[#383832]/60 flex items-center justify-between">
+                  <button
+                    onClick={() => toggleOldArchivePhotoLike(photo.id)}
+                    className="inline-flex items-center gap-1.5 text-xs font-bold text-rose-600 hover:text-rose-700 cursor-pointer active:scale-95 transition-transform"
+                  >
+                    <Heart className="w-4 h-4 fill-rose-600" />
+                    <span>{photo.likes || 0} Suka</span>
+                  </button>
+
+                  {canManagePhoto && (
+                    <button
+                      onClick={() => handleDeletePhoto(photo)}
+                      className="text-xs text-rose-600 hover:underline font-semibold cursor-pointer"
+                    >
+                      Hapus
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* History Modal */}
+      {isHistModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white dark:bg-[#1E1E1C] w-full max-w-lg rounded-[28px] border border-[#E0E0D8] dark:border-[#383832] shadow-2xl overflow-hidden animate-scale-in">
+            <div className="p-5 border-b border-[#E0E0D8] dark:border-[#383832] flex items-center justify-between">
+              <h3 className="font-serif text-lg font-bold text-[#2D2D2A] dark:text-[#EAEAE2]">
+                {editingHist ? 'Edit Peristiwa Sejarah' : 'Tambah Peristiwa Sejarah'}
+              </h3>
+              <button onClick={() => setIsHistModalOpen(false)} className="p-2 text-[#8E8E85] cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleSaveHist} className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
+              <div>
+                <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">Tahun Peristiwa *</label>
+                <input
+                  type="number"
+                  required
+                  value={histForm.year}
+                  onChange={e => setHistForm({ ...histForm, year: Number(e.target.value) })}
+                  className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">Judul Tonggak Sejarah *</label>
+                <input
+                  type="text"
+                  required
+                  value={histForm.title}
+                  onChange={e => setHistForm({ ...histForm, title: e.target.value })}
+                  placeholder="Contoh: Peresmian Gedung Perpustakaan & Laboratorium"
+                  className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">Kisah / Deskripsi Sejarah *</label>
+                <textarea
+                  required
+                  rows={4}
+                  value={histForm.description}
+                  onChange={e => setHistForm({ ...histForm, description: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+                />
+              </div>
+
+              <MediaUploadField
+                label="Foto Dokumentasi (URL / Upload)"
+                value={histForm.photoUrl}
+                onChange={url => setHistForm({ ...histForm, photoUrl: url })}
+                placeholder="https://..."
+              />
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button type="button" onClick={() => setIsHistModalOpen(false)} className="px-4 py-2 text-xs font-bold text-[#8E8E85]">Batal</button>
+                <button type="submit" className="px-5 py-2 bg-[#5A5A40] text-white text-xs font-bold rounded-xl">Simpan</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Old Photo Modal */}
+      {isPhotoModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white dark:bg-[#1E1E1C] w-full max-w-lg rounded-[28px] border border-[#E0E0D8] dark:border-[#383832] shadow-2xl overflow-hidden animate-scale-in">
+            <div className="p-5 border-b border-[#E0E0D8] dark:border-[#383832] flex items-center justify-between">
+              <h3 className="font-serif text-lg font-bold text-[#2D2D2A] dark:text-[#EAEAE2]">
+                Unggah Foto Tempo Dulu
+              </h3>
+              <button onClick={() => setIsPhotoModalOpen(false)} className="p-2 text-[#8E8E85] cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleSavePhoto} className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
+              <div>
+                <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">Judul / Momen Foto *</label>
+                <input
+                  type="text"
+                  required
+                  value={photoForm.title}
+                  onChange={e => setPhotoForm({ ...photoForm, title: e.target.value })}
+                  placeholder="Contoh: Upacara Bendera Angkatan 1995"
+                  className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">Perkiraan Tahun *</label>
+                <input
+                  type="text"
+                  required
+                  value={photoForm.estimatedYear}
+                  onChange={e => setPhotoForm({ ...photoForm, estimatedYear: e.target.value })}
+                  placeholder="Contoh: 1995"
+                  className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+                />
+              </div>
+
+              <MediaUploadField
+                label="File Foto (URL / Upload) *"
+                value={photoForm.photoUrl}
+                onChange={url => setPhotoForm({ ...photoForm, photoUrl: url })}
+                placeholder="https://..."
+              />
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">Cerita di Balik Foto *</label>
+                <textarea
+                  required
+                  rows={3}
+                  value={photoForm.story}
+                  onChange={e => setPhotoForm({ ...photoForm, story: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button type="button" onClick={() => setIsPhotoModalOpen(false)} className="px-4 py-2 text-xs font-bold text-[#8E8E85]">Batal</button>
+                <button type="submit" className="px-5 py-2 bg-[#5A5A40] text-white text-xs font-bold rounded-xl">Unggah Foto</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

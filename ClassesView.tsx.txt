@@ -1,0 +1,555 @@
+import React, { useState } from 'react';
+import { useApp } from '../context/AppContext';
+import { ClassDetailView } from './ClassDetailView';
+import { ClassRoom } from '../types';
+import { MediaUploadField } from '../components/MediaUploadField';
+import { ScrollEmboss } from '../components/ScrollEmboss';
+import { TikTokIcon } from '../components/TikTokIcon';
+import { QRCodeModal, QRCodeData } from '../components/QRCodeModal';
+import { 
+  School, 
+  Users, 
+  Plus, 
+  Search, 
+  Trash2, 
+  Edit3, 
+  ChevronRight, 
+  GraduationCap, 
+  ShieldCheck, 
+  X, 
+  Lock, 
+  UserCheck, 
+  Sparkles, 
+  Save,
+  Image as ImageIcon,
+  User,
+  ExternalLink,
+  QrCode
+} from 'lucide-react';
+
+export const ClassesView: React.FC = () => {
+  const { 
+    classes, 
+    students, 
+    selectedClassId, 
+    setSelectedClassId, 
+    openClass,
+    authSession, 
+    addClass, 
+    updateClass,
+    deleteClass, 
+    requestDeleteConfirm 
+  } = useApp();
+
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [selectedGrade, setSelectedGrade] = useState<string>('Semua');
+  const [isAddClassModalOpen, setIsAddClassModalOpen] = useState<boolean>(false);
+  const [editingClass, setEditingClass] = useState<ClassRoom | null>(null);
+  const [qrModalData, setQrModalData] = useState<QRCodeData | null>(null);
+
+  // Add/Edit Class Form State
+  const [classForm, setClassForm] = useState({
+    name: '',
+    grade: 'Kelas 12',
+    academicYear: '2024/2025',
+    jurusan: 'Matematika & Ilmu Pengetahuan Alam',
+    coverUrl: '',
+    tiktokUrl: '',
+    adminUsername: '',
+    adminPassword: '',
+    adminPhotoUrl: ''
+  });
+
+  // If a class is currently selected, render the ClassDetailView
+  const currentSelectedClass = classes.find(c => c.id === selectedClassId);
+  if (currentSelectedClass) {
+    return (
+      <ClassDetailView
+        classRoom={currentSelectedClass}
+        onBack={() => setSelectedClassId(null)}
+      />
+    );
+  }
+
+  const grades = ['Semua', 'Kelas 12', 'Kelas 11', 'Kelas 10'];
+
+  const filteredClasses = classes.filter(c => {
+    const matchSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        (c.jurusan && c.jurusan.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                        (c.perangkat?.waliKelas && c.perangkat.waliKelas.toLowerCase().includes(searchTerm.toLowerCase()));
+    const matchGrade = selectedGrade === 'Semua' || c.grade === selectedGrade;
+    return matchSearch && matchGrade;
+  });
+
+  const handleOpenAdd = () => {
+    setEditingClass(null);
+    setClassForm({
+      name: '',
+      grade: 'Kelas 12',
+      academicYear: '2024/2025',
+      jurusan: 'Matematika & Ilmu Pengetahuan Alam',
+      coverUrl: '',
+      tiktokUrl: '',
+      adminUsername: '',
+      adminPassword: '',
+      adminPhotoUrl: ''
+    });
+    setIsAddClassModalOpen(true);
+  };
+
+  const handleOpenEdit = (cls: ClassRoom) => {
+    setEditingClass(cls);
+    setClassForm({
+      name: cls.name,
+      grade: cls.grade,
+      academicYear: cls.academicYear,
+      jurusan: cls.jurusan || '',
+      coverUrl: cls.coverUrl || '',
+      tiktokUrl: cls.tiktokUrl || '',
+      adminUsername: cls.adminUsername,
+      adminPassword: cls.adminPasswordHash,
+      adminPhotoUrl: cls.adminPhotoUrl || ''
+    });
+    setIsAddClassModalOpen(true);
+  };
+
+  const handleSaveClass = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!classForm.name.trim()) return;
+
+    if (editingClass) {
+      updateClass(editingClass.id, {
+        name: classForm.name.trim(),
+        grade: classForm.grade,
+        academicYear: classForm.academicYear.trim(),
+        jurusan: classForm.jurusan.trim(),
+        coverUrl: classForm.coverUrl.trim() || undefined,
+        tiktokUrl: classForm.tiktokUrl.trim() || undefined,
+        adminUsername: classForm.adminUsername.trim() || editingClass.adminUsername,
+        adminPasswordHash: classForm.adminPassword.trim() || editingClass.adminPasswordHash,
+        adminPhotoUrl: classForm.adminPhotoUrl.trim() || undefined
+      });
+    } else {
+      addClass({
+        name: classForm.name.trim(),
+        grade: classForm.grade,
+        academicYear: classForm.academicYear.trim(),
+        jurusan: classForm.jurusan.trim(),
+        coverUrl: classForm.coverUrl.trim() || undefined,
+        tiktokUrl: classForm.tiktokUrl.trim() || undefined,
+        adminUsername: classForm.adminUsername.trim() || `admin_${classForm.name.toLowerCase().replace(/\s+/g, '')}`,
+        adminPassword: classForm.adminPassword.trim() || 'admin123',
+        adminPhotoUrl: classForm.adminPhotoUrl.trim() || undefined
+      });
+    }
+
+    setIsAddClassModalOpen(false);
+  };
+
+  return (
+    <div className="space-y-8 pb-24 text-[#2D2D2A]">
+      {/* Header Banner */}
+      <div className="bg-white border border-[#E0E0D8] rounded-[32px] p-6 sm:p-8 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="space-y-2">
+          <div className="inline-flex items-center gap-2 px-3 py-1 bg-[#F5F5F0] text-[#5A5A40] text-xs font-bold uppercase tracking-widest rounded-full border border-[#E0E0D8]">
+            <School className="w-3.5 h-3.5 text-[#5A5A40]" />
+            <span>Direktori Ruang Kelas & Kenangan Siswa</span>
+          </div>
+          <h2 className="font-serif text-2xl sm:text-3xl font-bold text-[#2D2D2A] tracking-tight">
+            Daftar Seluruh Kelas
+          </h2>
+          <p className="text-[#8E8E85] text-sm max-w-xl">
+            Pilih kelas untuk melihat galeri foto kenangan, susunan perangkat kelas, daftar lengkap siswa, serta akses portal siswa mandiri.
+          </p>
+        </div>
+
+        {authSession.role === 'super_admin' && (
+          <button
+            id="btn-add-class"
+            onClick={handleOpenAdd}
+            className="px-5 py-3 rounded-2xl bg-[#5A5A40] hover:bg-[#484833] text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer flex-shrink-0"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Tambah Kelas & Akun Pengelola</span>
+          </button>
+        )}
+      </div>
+
+      {/* Filter and Search */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="relative w-full sm:w-80">
+          <Search className="w-4 h-4 absolute left-3.5 top-3 text-[#8E8E85]" />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            placeholder="Cari nama kelas / wali kelas..."
+            className="w-full pl-10 pr-4 py-2.5 bg-white border border-[#E0E0D8] rounded-2xl text-sm text-[#2D2D2A] placeholder-[#8E8E85] focus:outline-none focus:border-[#5A5A40]"
+          />
+        </div>
+
+        <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0 scrollbar-none">
+          {grades.map(g => (
+            <button
+              key={g}
+              onClick={() => setSelectedGrade(g)}
+              className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                selectedGrade === g
+                  ? 'bg-[#5A5A40] text-white shadow-sm'
+                  : 'bg-white text-[#8E8E85] hover:text-[#2D2D2A] border border-[#E0E0D8]'
+              }`}
+            >
+              {g}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Class Cards Grid */}
+      {filteredClasses.length === 0 ? (
+        <div className="bg-white border border-[#E0E0D8] rounded-[32px] p-12 text-center text-[#8E8E85]">
+          <School className="w-12 h-12 mx-auto text-[#8E8E85] mb-3" />
+          <p className="font-serif text-base font-bold text-[#2D2D2A]">Tidak ada kelas yang sesuai pencarian.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-7">
+          {filteredClasses.map((cls, idx) => {
+            const classStudentCount = students.filter(s => s.classId === cls.id).length;
+            const photoCount = cls.gallery.length;
+
+            return (
+              <ScrollEmboss
+                key={cls.id}
+                delay={idx * 60}
+                interactiveHover
+                className="h-full"
+              >
+                <div
+                  onClick={() => openClass(cls.id)}
+                  className="h-full bg-white border border-[#E0E0D8] rounded-[28px] overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col justify-between group relative cursor-pointer"
+                >
+                  {/* Cover Image Header - ONLY IF PROVIDED */}
+                  {cls.coverUrl && (
+                    <div className="relative aspect-[16/8] w-full bg-[#F5F5F0] overflow-hidden">
+                      <img
+                        src={cls.coverUrl}
+                        alt={cls.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        loading="lazy"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-60" />
+                      <div className="absolute bottom-3 left-3 px-2.5 py-1 bg-white/90 text-[#5A5A40] text-xs font-bold rounded-lg backdrop-blur-sm shadow-sm">
+                        {cls.grade}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="p-6 space-y-4 flex-1 flex flex-col justify-between">
+                    <div className="space-y-4">
+                      {/* Class Badge Top (if no cover) */}
+                      {!cls.coverUrl && (
+                        <div className="flex items-center justify-between">
+                          <span className="px-3 py-1 bg-[#F5F5F0] text-[#5A5A40] border border-[#E0E0D8] text-xs font-bold rounded-xl">
+                            {cls.grade}
+                          </span>
+                          <span className="inline-flex items-center gap-1.5 text-xs text-[#5A5A40] font-semibold bg-[#F5F5F0] px-2.5 py-0.5 rounded-full border border-[#E0E0D8]">
+                            <span className="w-2 h-2 rounded-full bg-[#5A5A40] animate-pulse" />
+                            Aktif
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Class Name & Admin Profile Info */}
+                      <div>
+                        <div className="flex items-center justify-between gap-2">
+                          <h3 className="font-serif text-2xl font-bold text-[#2D2D2A] group-hover:text-[#5A5A40] transition-colors tracking-tight">
+                            {cls.name}
+                          </h3>
+                          {/* Admin profile photo thumbnail if uploaded */}
+                          {cls.adminPhotoUrl && (
+                            <img
+                              src={cls.adminPhotoUrl}
+                              alt="Admin"
+                              className="w-8 h-8 rounded-full object-cover border border-[#5A5A40]/30 shadow-xs"
+                              title={`Admin: ${cls.adminUsername}`}
+                            />
+                          )}
+                        </div>
+                        <p className="text-xs text-[#8E8E85] mt-1 line-clamp-1">
+                          {cls.jurusan || 'Peminatan Umum'} • TA {cls.academicYear}
+                        </p>
+                      </div>
+
+                      {/* Wali Kelas & Info Box */}
+                      <div className="bg-[#F8F8F5] p-4 rounded-2xl border border-[#E0E0D8] space-y-1.5 text-xs">
+                        <div className="text-[#8E8E85]">
+                          <span>Wali Kelas: </span>
+                          <strong className="text-[#2D2D2A]">{cls.perangkat.waliKelas}</strong>
+                        </div>
+                        <div className="text-[#8E8E85]">
+                          <span>Ketua Kelas: </span>
+                          <strong className="text-[#2D2D2A]">{cls.perangkat.ketuaKelas || '-'}</strong>
+                        </div>
+                      </div>
+
+                      {/* Stats Counter */}
+                      <div className="grid grid-cols-2 gap-2 text-center text-xs">
+                        <div className="p-3 bg-[#F5F5F0] rounded-2xl border border-[#E0E0D8]">
+                          <span className="text-[10px] text-[#8E8E85] block uppercase font-bold tracking-wider">Jumlah Siswa</span>
+                          <strong className="font-serif text-sm font-bold text-[#2D2D2A]">{classStudentCount} Siswa</strong>
+                        </div>
+                        <div className="p-3 bg-[#F5F5F0] rounded-2xl border border-[#E0E0D8]">
+                          <span className="text-[10px] text-[#8E8E85] block uppercase font-bold tracking-wider">Galeri Foto</span>
+                          <strong className="font-serif text-sm font-bold text-[#5A5A40]">{photoCount} Foto</strong>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Card Footer Actions */}
+                    <div className="pt-4 mt-2 border-t border-[#E0E0D8] flex items-center justify-between gap-2">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openClass(cls.id);
+                        }}
+                        className="flex-1 py-2.5 px-4 bg-[#5A5A40] hover:bg-[#484833] text-white font-bold text-xs uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 shadow-sm cursor-pointer transition-all active:scale-95"
+                      >
+                        <span>Masuk Halaman Kelas</span>
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+
+                      {/* QR Kenangan Button */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setQrModalData({
+                            type: 'class',
+                            id: cls.id,
+                            title: `Ruang Kelas ${cls.name}`,
+                            subtitle: `Wali Kelas: ${cls.perangkat.waliKelas || '-'} • ${cls.grade} TA ${cls.academicYear}`,
+                            category: cls.jurusan || cls.grade
+                          });
+                        }}
+                        className="p-2.5 rounded-xl bg-[#F5F5F0] hover:bg-[#5A5A40] text-[#5A5A40] hover:text-white border border-[#E0E0D8] cursor-pointer shadow-xs transition-all active:scale-95"
+                        title={`Buat & Unduh Kode QR Kenangan Digital Kelas ${cls.name}`}
+                      >
+                        <QrCode className="w-4 h-4" />
+                      </button>
+
+                      {cls.tiktokUrl && (
+                        <a
+                          href={cls.tiktokUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-2.5 rounded-xl bg-black hover:bg-neutral-900 text-white cursor-pointer shadow-sm transition-all active:scale-95"
+                          title={`Buka Akun TikTok Kelas ${cls.name}`}
+                          onClick={e => e.stopPropagation()}
+                        >
+                          <TikTokIcon className="w-4 h-4 text-white" />
+                        </a>
+                      )}
+
+                      {authSession.role === 'super_admin' && (
+                        <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenEdit(cls);
+                            }}
+                            className="p-2.5 rounded-xl bg-[#F5F5F0] hover:bg-[#E0E0D8] text-[#5A5A40] cursor-pointer"
+                            title="Edit Kelas & Pengelola"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              requestDeleteConfirm({
+                                itemName: `Kelas ${cls.name}`,
+                                message: `Yakin ingin menghapus kelas ${cls.name}? Seluruh data siswa dan foto kenangan kelas ini akan terhapus secara permanen.`,
+                                onConfirm: () => deleteClass(cls.id)
+                              });
+                            }}
+                            className="p-2.5 rounded-xl bg-[#8C4A32]/10 hover:bg-[#8C4A32]/20 text-[#8C4A32] cursor-pointer"
+                            title="Hapus Kelas"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </ScrollEmboss>
+            );
+          })}
+        </div>
+      )}
+
+      {/* 🔹 ADD / EDIT CLASS MODAL (Admin Utama) */}
+      {isAddClassModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
+          <div className="relative w-full max-w-2xl bg-white border border-[#E0E0D8] rounded-[32px] shadow-2xl p-6 sm:p-8 max-h-[90vh] overflow-y-auto text-[#2D2D2A]">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E0E0D8] mb-4">
+              <h3 className="font-serif text-xl font-bold text-[#5A5A40]">
+                {editingClass ? 'Edit Kelas & Akun Pengelola' : 'Buat Kelas Baru & Akun Pengelola'}
+              </h3>
+              <button onClick={() => setIsAddClassModalOpen(false)} className="text-[#8E8E85] hover:text-[#2D2D2A] p-1.5 rounded-xl hover:bg-[#F5F5F0]">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveClass} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Nama Kelas *</label>
+                  <input
+                    type="text"
+                    required
+                    value={classForm.name}
+                    onChange={e => setClassForm({ ...classForm, name: e.target.value })}
+                    placeholder="Contoh: XII MIPA 3 / X-B"
+                    className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-sm focus:outline-none focus:border-[#5A5A40]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Tingkat Kelas *</label>
+                  <select
+                    value={classForm.grade}
+                    onChange={e => setClassForm({ ...classForm, grade: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-sm focus:outline-none focus:border-[#5A5A40]"
+                  >
+                    <option value="Kelas 12">Kelas 12 (Tingkat Akhir)</option>
+                    <option value="Kelas 11">Kelas 11</option>
+                    <option value="Kelas 10">Kelas 10</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Tahun Ajaran</label>
+                  <input
+                    type="text"
+                    value={classForm.academicYear}
+                    onChange={e => setClassForm({ ...classForm, academicYear: e.target.value })}
+                    placeholder="2024/2025"
+                    className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-sm focus:outline-none focus:border-[#5A5A40]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Jurusan / Peminatan</label>
+                  <input
+                    type="text"
+                    value={classForm.jurusan}
+                    onChange={e => setClassForm({ ...classForm, jurusan: e.target.value })}
+                    placeholder="Contoh: MIPA / IPS / Bahasa"
+                    className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-sm focus:outline-none focus:border-[#5A5A40]"
+                  />
+                </div>
+              </div>
+
+              {/* Cover Photo Upload (Opsional) */}
+              <div className="p-4 bg-[#F8F8F5] rounded-2xl border border-[#E0E0D8] space-y-3">
+                <MediaUploadField
+                  id="class-cover-upload"
+                  label="Foto Sampul / Banner Kelas (Opsional)"
+                  mediaType="image"
+                  value={classForm.coverUrl}
+                  onChange={url => setClassForm({ ...classForm, coverUrl: url })}
+                  required={false}
+                  helperText="Upload foto sampul kelas bersifat opsional. Jika tidak diisi, sampul tidak akan ditampilkan."
+                />
+              </div>
+
+              {/* Tautan Akun TikTok Kelas */}
+              <div className="p-4 bg-[#F8F8F5] rounded-2xl border border-[#E0E0D8] space-y-2">
+                <label className="block text-xs font-bold text-[#2D2D2A] flex items-center gap-1.5">
+                  <TikTokIcon className="w-4 h-4 text-black" />
+                  <span>Tautan Akun TikTok Kelas (Opsional)</span>
+                </label>
+                <input
+                  type="url"
+                  value={classForm.tiktokUrl}
+                  onChange={e => setClassForm({ ...classForm, tiktokUrl: e.target.value })}
+                  placeholder="https://www.tiktok.com/@nama_akun_kelas"
+                  className="w-full px-3.5 py-2 bg-white border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-xs focus:outline-none focus:border-[#5A5A40]"
+                />
+                <p className="text-[11px] text-[#8E8E85]">
+                  Tautan akun TikTok kelas ini dapat diubah sewaktu-waktu oleh Admin Kelas dan Admin Utama.
+                </p>
+              </div>
+
+              {/* Class Admin Credentials Setup & Photo */}
+              <div className="p-4 bg-[#F8F8F5] rounded-2xl border border-[#E0E0D8] space-y-3">
+                <span className="text-xs font-bold uppercase tracking-wider text-[#5A5A40] block">
+                  Kredensial & Foto Profil Admin Pengelola Kelas
+                </span>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-[#8E8E85] mb-1">Username Admin Kelas</label>
+                    <input
+                      type="text"
+                      value={classForm.adminUsername}
+                      onChange={e => setClassForm({ ...classForm, adminUsername: e.target.value })}
+                      placeholder="Contoh: admin_12mipa3"
+                      className="w-full px-3 py-2 bg-white border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-xs focus:outline-none focus:border-[#5A5A40]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-[#8E8E85] mb-1">Kata Sandi Admin</label>
+                    <input
+                      type="password"
+                      value={classForm.adminPassword}
+                      onChange={e => setClassForm({ ...classForm, adminPassword: e.target.value })}
+                      placeholder="Minimal 6 karakter"
+                      className="w-full px-3 py-2 bg-white border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-xs focus:outline-none focus:border-[#5A5A40]"
+                    />
+                  </div>
+                </div>
+
+                <MediaUploadField
+                  id="class-admin-photo-upload"
+                  label="Foto Profil Admin Pengelola (Opsional)"
+                  mediaType="image"
+                  value={classForm.adminPhotoUrl}
+                  onChange={url => setClassForm({ ...classForm, adminPhotoUrl: url })}
+                  required={false}
+                  helperText="Upload foto profil admin bersifat opsional. Admin dapat menambah, mengubah, atau menghapus foto kapan saja."
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#E0E0D8]">
+                <button
+                  type="button"
+                  onClick={() => setIsAddClassModalOpen(false)}
+                  className="px-4 py-2 bg-[#E0E0D8] hover:bg-[#D0D0C8] text-[#2D2D2A] text-xs font-bold rounded-xl cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-2 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-md cursor-pointer hover:scale-[1.02] active:scale-95 transition-all"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>{editingClass ? 'SIMPAN PERUBAHAN KELAS' : 'SIMPAN & BUAT KELAS'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* 📱 QR CODE MODAL */}
+      <QRCodeModal
+        isOpen={!!qrModalData}
+        onClose={() => setQrModalData(null)}
+        data={qrModalData}
+      />
+    </div>
+  );
+};

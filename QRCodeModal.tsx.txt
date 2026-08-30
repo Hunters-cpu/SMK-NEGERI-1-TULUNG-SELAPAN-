@@ -1,0 +1,436 @@
+import React, { useEffect, useRef, useState } from 'react';
+import QRCode from 'qrcode';
+import { useApp } from '../context/AppContext';
+import { 
+  QrCode, 
+  Download, 
+  Copy, 
+  Check, 
+  Printer, 
+  Share2, 
+  X, 
+  Sparkles, 
+  Smartphone, 
+  Palette, 
+  Layers, 
+  Calendar, 
+  ExternalLink,
+  BookOpen
+} from 'lucide-react';
+
+export interface QRCodeData {
+  title: string;
+  subtitle: string;
+  type: 'class' | 'activity' | 'announcement' | 'event' | 'school';
+  id?: string;
+  category?: string;
+  date?: string;
+  targetUrl?: string;
+  customPayload?: string;
+}
+
+interface QRCodeModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  data: QRCodeData | null;
+}
+
+export const QRCodeModal: React.FC<QRCodeModalProps> = ({ isOpen, onClose, data }) => {
+  const { schoolInfo, showToast } = useApp();
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  const [colorTheme, setColorTheme] = useState<'olive' | 'dark' | 'indigo' | 'emerald'>('olive');
+  const [includeLogo, setIncludeLogo] = useState<boolean>(true);
+  const [copied, setCopied] = useState<boolean>(false);
+  const [dataUrl, setDataUrl] = useState<string>('');
+
+  // Determine the URL or deep-link payload to encode
+  const currentUrl = typeof window !== 'undefined' ? window.location.href.split('?')[0] : 'https://sekolah.id';
+  
+  let targetLink = data?.targetUrl || '';
+  if (!targetLink && data) {
+    if (data.type === 'class') {
+      targetLink = `${currentUrl}?view=classes&classId=${encodeURIComponent(data.id || '')}`;
+    } else if (data.type === 'activity') {
+      targetLink = `${currentUrl}?view=activities&actId=${encodeURIComponent(data.id || '')}`;
+    } else if (data.type === 'announcement') {
+      targetLink = `${currentUrl}?view=announcements&annId=${encodeURIComponent(data.id || '')}`;
+    } else if (data.type === 'event') {
+      targetLink = `${currentUrl}?view=calendar&eventId=${encodeURIComponent(data.id || '')}`;
+    } else {
+      targetLink = currentUrl;
+    }
+  }
+
+  // Theme color definitions
+  const themeColors = {
+    olive: { dark: '#5A5A40', light: '#FFFFFF' },
+    dark: { dark: '#1E1E1C', light: '#FFFFFF' },
+    indigo: { dark: '#3730A3', light: '#FFFFFF' },
+    emerald: { dark: '#065F46', light: '#FFFFFF' }
+  };
+
+  useEffect(() => {
+    if (!isOpen || !data || !canvasRef.current) return;
+
+    const generateQR = async () => {
+      try {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+
+        const colors = themeColors[colorTheme];
+        
+        await QRCode.toCanvas(canvas, targetLink, {
+          width: 320,
+          margin: 2,
+          color: {
+            dark: colors.dark,
+            light: colors.light
+          },
+          errorCorrectionLevel: 'H' // High error correction to allow center emblem/logo
+        });
+
+        // If include logo, draw emblem in the center
+        if (includeLogo) {
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            const size = canvas.width;
+            const center = size / 2;
+            const badgeRadius = 24;
+
+            // Draw white background circle for logo
+            ctx.beginPath();
+            ctx.arc(center, center, badgeRadius, 0, 2 * Math.PI);
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fill();
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = colors.dark;
+            ctx.stroke();
+
+            // Draw text or initial
+            ctx.fillStyle = colors.dark;
+            ctx.font = 'bold 12px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            const initials = schoolInfo.name
+              ? schoolInfo.name.split(' ').map(w => w[0]).join('').slice(0, 3).toUpperCase()
+              : 'SCH';
+            ctx.fillText(initials, center, center);
+          }
+        }
+
+        const url = canvas.toDataURL('image/png');
+        setDataUrl(url);
+      } catch (err) {
+        console.error('Failed to render QR Code', err);
+      }
+    };
+
+    generateQR();
+  }, [isOpen, data, targetLink, colorTheme, includeLogo, schoolInfo.name]);
+
+  if (!isOpen || !data) return null;
+
+  const handleDownloadPNG = () => {
+    if (!dataUrl) return;
+    const cleanTitle = (data.title || 'qr-code').toLowerCase().replace(/[^a-z0-9]/g, '-');
+    const filename = `qr-${data.type}-${cleanTitle}.png`;
+
+    const link = document.createElement('a');
+    link.href = dataUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    showToast(`QR Code "${filename}" berhasil diunduh!`, 'success');
+  };
+
+  const handleDownloadSVG = async () => {
+    try {
+      const colors = themeColors[colorTheme];
+      const svgString = await QRCode.toString(targetLink, {
+        type: 'svg',
+        width: 400,
+        margin: 2,
+        color: {
+          dark: colors.dark,
+          light: colors.light
+        },
+        errorCorrectionLevel: 'H'
+      });
+
+      const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const cleanTitle = (data.title || 'qr-code').toLowerCase().replace(/[^a-z0-9]/g, '-');
+      const filename = `qr-vector-${cleanTitle}.svg`;
+
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      showToast(`Berkas Vektor "${filename}" berhasil diunduh!`, 'success');
+    } catch {
+      showToast('Gagal mengunduh SVG.', 'error');
+    }
+  };
+
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(targetLink);
+      setCopied(true);
+      showToast('Tautan digital kenangan disalin ke papan klip!', 'success');
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      showToast('Gagal menyalin tautan.', 'error');
+    }
+  };
+
+  const handlePrintCard = () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      showToast('Izinkan pop-up peramban untuk mencetak kartu QR.', 'warning');
+      return;
+    }
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Kartu QR Kenangan - ${data.title}</title>
+          <style>
+            @page { size: A5 landscape; margin: 15mm; }
+            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #fff; color: #222; margin: 0; padding: 20px; display: flex; align-items: center; justify-content: center; min-height: 90vh; }
+            .card { border: 3px solid ${themeColors[colorTheme].dark}; border-radius: 20px; padding: 30px; text-align: center; max-width: 500px; width: 100%; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+            .header-badge { display: inline-block; background: ${themeColors[colorTheme].dark}; color: #fff; padding: 6px 16px; border-radius: 20px; font-size: 12px; font-weight: bold; text-transform: uppercase; margin-bottom: 15px; }
+            h2 { margin: 0 0 6px; font-size: 24px; color: #111; }
+            p.sub { margin: 0 0 20px; color: #666; font-size: 14px; }
+            .qr-frame { background: #fdfdfd; padding: 15px; border-radius: 16px; display: inline-block; border: 1px solid #e0e0d8; margin-bottom: 20px; }
+            .qr-frame img { width: 220px; height: 220px; display: block; }
+            .footer { border-top: 1px dashed #ccc; padding-top: 15px; font-size: 12px; color: #777; }
+            .brand { font-weight: bold; color: ${themeColors[colorTheme].dark}; }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <div class="header-badge">Pindai Kenangan Digital</div>
+            <h2>${data.title}</h2>
+            <p class="sub">${data.subtitle || schoolInfo.name}</p>
+            <div class="qr-frame">
+              <img src="${dataUrl}" alt="QR Code" />
+            </div>
+            <div class="footer">
+              <p>Arahkan kamera smartphone Anda ke kode QR di atas untuk membuka galeri foto, video kenangan & informasi kelas langsung di ponsel.</p>
+              <p class="brand">${schoolInfo.name} • Tahun Ajaran ${schoolInfo.academicYear || '2026/2027'}</p>
+            </div>
+          </div>
+          <script>
+            window.onload = function() {
+              window.print();
+            };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+      <div className="bg-white dark:bg-[#1E1E1C] rounded-3xl border border-[#E0E0D8] dark:border-[#383832] shadow-2xl w-full max-w-lg overflow-hidden animate-scale-up text-[#2D2D2A] dark:text-[#EAEAE2] flex flex-col max-h-[92vh]">
+        
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-[#E0E0D8] dark:border-[#383832] flex items-center justify-between bg-[#FBFBFA] dark:bg-[#252522]">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-[#5A5A40] text-white flex items-center justify-center shadow-md">
+              <QrCode className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-serif text-base sm:text-lg font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">
+                  Kode QR Kenangan Digital
+                </h3>
+                <span className="px-2 py-0.5 text-[10px] font-bold bg-[#5A5A40]/10 text-[#5A5A40] dark:text-[#C5C5B0] rounded-full">
+                  Scan & Akses
+                </span>
+              </div>
+              <p className="text-xs text-[#7A7A70] dark:text-[#A4A496]">
+                Pindai dengan kamera smartphone untuk membuka langsung di HP
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 text-[#7A7A70] hover:text-[#2D2D2A] dark:hover:text-[#F0F0EA] rounded-full hover:bg-[#EAEAE5] dark:hover:bg-[#33332D] transition-colors cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Content Body */}
+        <div className="p-6 overflow-y-auto space-y-5">
+          
+          {/* Target Item Card */}
+          <div className="p-4 rounded-2xl bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#383832] flex items-start gap-3">
+            <div className="p-2 rounded-xl bg-white dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#383832] text-[#5A5A40] dark:text-[#C5C5B0] shadow-xs">
+              {data.type === 'class' ? <BookOpen className="w-4 h-4" /> : <Calendar className="w-4 h-4" />}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#5A5A40] dark:text-[#C5C5B0]">
+                  {data.type === 'class' ? 'Ruang Kelas & Album' : 'Kegiatan / Agenda Acara'}
+                </span>
+                {data.category && (
+                  <span className="text-[10px] px-2 py-0.2 rounded-full bg-[#E0E0D8] dark:bg-[#383832] text-[#5A5A40] dark:text-[#C5C5B0]">
+                    {data.category}
+                  </span>
+                )}
+              </div>
+              <h4 className="font-bold text-sm text-[#2D2D2A] dark:text-[#F0F0EA] truncate mt-0.5">
+                {data.title}
+              </h4>
+              <p className="text-xs text-[#7A7A70] dark:text-[#A4A496] truncate">
+                {data.subtitle || schoolInfo.name}
+              </p>
+            </div>
+          </div>
+
+          {/* QR Code Canvas Preview Container */}
+          <div className="flex flex-col items-center justify-center p-6 bg-white dark:bg-[#181816] rounded-2xl border border-[#E0E0D8] dark:border-[#383832] shadow-inner relative">
+            <canvas ref={canvasRef} className="rounded-xl shadow-xs max-w-full" />
+            
+            <div className="mt-4 flex items-center gap-2 text-xs text-[#7A7A70] dark:text-[#A4A496]">
+              <Smartphone className="w-4 h-4 text-[#5A5A40] dark:text-[#C5C5B0]" />
+              <span>Arahkan kamera HP ke QR Code di atas</span>
+            </div>
+          </div>
+
+          {/* Customization Options */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between text-xs font-bold text-[#7A7A70] dark:text-[#A4A496]">
+              <span className="flex items-center gap-1.5">
+                <Palette className="w-3.5 h-3.5 text-[#5A5A40] dark:text-[#C5C5B0]" />
+                <span>Pilihan Tema Warna QR:</span>
+              </span>
+              <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={includeLogo}
+                  onChange={(e) => setIncludeLogo(e.target.checked)}
+                  className="rounded text-[#5A5A40] focus:ring-[#5A5A40]"
+                />
+                <span>Logo Tengah</span>
+              </label>
+            </div>
+
+            <div className="grid grid-cols-4 gap-2">
+              <button
+                type="button"
+                onClick={() => setColorTheme('olive')}
+                className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  colorTheme === 'olive'
+                    ? 'border-[#5A5A40] bg-[#5A5A40] text-white shadow-xs'
+                    : 'border-[#E0E0D8] dark:border-[#383832] bg-white dark:bg-[#282825] hover:border-[#5A5A40]'
+                }`}
+              >
+                <span className="w-2.5 h-2.5 rounded-full bg-[#5A5A40] border border-white" />
+                <span>Olive</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setColorTheme('dark')}
+                className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  colorTheme === 'dark'
+                    ? 'border-[#1E1E1C] bg-[#1E1E1C] text-white shadow-xs'
+                    : 'border-[#E0E0D8] dark:border-[#383832] bg-white dark:bg-[#282825] hover:border-[#1E1E1C]'
+                }`}
+              >
+                <span className="w-2.5 h-2.5 rounded-full bg-[#1E1E1C] border border-white" />
+                <span>Hitam</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setColorTheme('indigo')}
+                className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  colorTheme === 'indigo'
+                    ? 'border-indigo-800 bg-indigo-800 text-white shadow-xs'
+                    : 'border-[#E0E0D8] dark:border-[#383832] bg-white dark:bg-[#282825] hover:border-indigo-600'
+                }`}
+              >
+                <span className="w-2.5 h-2.5 rounded-full bg-indigo-700 border border-white" />
+                <span>Indigo</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setColorTheme('emerald')}
+                className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  colorTheme === 'emerald'
+                    ? 'border-emerald-800 bg-emerald-800 text-white shadow-xs'
+                    : 'border-[#E0E0D8] dark:border-[#383832] bg-white dark:bg-[#282825] hover:border-emerald-600'
+                }`}
+              >
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-700 border border-white" />
+                <span>Emerald</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Copy Link Row */}
+          <div className="p-3 rounded-2xl bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#383832] flex items-center justify-between gap-2">
+            <div className="text-xs truncate flex-1 font-mono text-[#7A7A70] dark:text-[#A4A496]">
+              {targetLink}
+            </div>
+            <button
+              onClick={handleCopyLink}
+              className="px-3 py-1.5 bg-white dark:bg-[#1E1E1C] hover:bg-[#EAEAE5] dark:hover:bg-[#33332D] text-[#5A5A40] dark:text-[#C5C5B0] border border-[#E0E0D8] dark:border-[#383832] rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 shadow-2xs active:scale-95"
+            >
+              {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+              <span>{copied ? 'Tersalin' : 'Salin'}</span>
+            </button>
+          </div>
+
+        </div>
+
+        {/* Modal Footer Actions */}
+        <div className="px-6 py-4 border-t border-[#E0E0D8] dark:border-[#383832] bg-[#FBFBFA] dark:bg-[#252522] flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handlePrintCard}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-[#E0E0D8] dark:border-[#383832] bg-white dark:bg-[#282825] hover:bg-[#F5F5F0] dark:hover:bg-[#33332D] text-xs font-bold text-[#2D2D2A] dark:text-[#EAEAE2] transition-all cursor-pointer shadow-xs active:scale-95"
+            >
+              <Printer className="w-4 h-4 text-[#5A5A40] dark:text-[#C5C5B0]" />
+              <span>Cetak Kartu QR</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleDownloadSVG}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-[#E0E0D8] dark:border-[#383832] bg-white dark:bg-[#282825] hover:bg-[#F5F5F0] dark:hover:bg-[#33332D] text-xs font-bold text-[#2D2D2A] dark:text-[#EAEAE2] transition-all cursor-pointer shadow-xs active:scale-95"
+            >
+              <Download className="w-4 h-4 text-[#5A5A40] dark:text-[#C5C5B0]" />
+              <span>Unduh SVG</span>
+            </button>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleDownloadPNG}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#5A5A40] hover:bg-[#444430] text-white text-xs sm:text-sm font-bold shadow-md transition-all cursor-pointer active:scale-95"
+          >
+            <Download className="w-4 h-4" />
+            <span>Unduh Gambar PNG</span>
+          </button>
+        </div>
+
+      </div>
+    </div>
+  );
+};

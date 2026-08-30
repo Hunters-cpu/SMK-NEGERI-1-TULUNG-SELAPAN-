@@ -1,0 +1,382 @@
+import React, { useState } from 'react';
+import { useApp } from '../context/AppContext';
+import { ScrollEmboss } from '../components/ScrollEmboss';
+import { MediaUploadField } from '../components/MediaUploadField';
+import { OsisMember } from '../types';
+import { 
+  Award, 
+  Sparkles, 
+  Plus, 
+  Edit3, 
+  Trash2, 
+  User, 
+  Instagram, 
+  Quote, 
+  ShieldCheck, 
+  X, 
+  ArrowLeft,
+  Crown,
+  HeartHandshake
+} from 'lucide-react';
+
+export const OsisView: React.FC = () => {
+  const { 
+    osisList, 
+    addOsisMember, 
+    updateOsisMember, 
+    deleteOsisMember, 
+    requestDeleteConfirm,
+    authSession, 
+    setCurrentView 
+  } = useApp();
+
+  const [selectedCategory, setSelectedCategory] = useState<string>('Semua');
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [editingMember, setEditingMember] = useState<OsisMember | null>(null);
+
+  const [form, setForm] = useState({
+    name: '',
+    gender: 'L' as 'L' | 'P',
+    jabatan: 'Ketua Umum OSIS',
+    bidang: 'Pengurus Inti',
+    photoUrl: '',
+    quote: '',
+    instagram: ''
+  });
+
+  const isSuperAdmin = authSession.role === 'super_admin' || 
+    (authSession.role === 'custom_admin' && (authSession.allowedScopes?.includes('all') || authSession.allowedScopes?.includes('edit_osis')));
+
+  const handleOpenAdd = () => {
+    setEditingMember(null);
+    setForm({
+      name: '',
+      gender: 'L',
+      jabatan: 'Sekbid Ketaqwaan & Budi Pekerti',
+      bidang: 'Seksi Bidang (Sekbid)',
+      photoUrl: '',
+      quote: 'Siap mengabdi untuk kemajuan sekolah.',
+      instagram: ''
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEdit = (m: OsisMember) => {
+    setEditingMember(m);
+    setForm({
+      name: m.name,
+      gender: m.gender || 'L',
+      jabatan: m.jabatan,
+      bidang: m.bidang || 'Pengurus Inti',
+      photoUrl: m.photoUrl || '',
+      quote: m.quote || '',
+      instagram: m.instagram || ''
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.name.trim() || !form.jabatan.trim()) return;
+
+    if (editingMember) {
+      updateOsisMember(editingMember.id, {
+        name: form.name.trim(),
+        gender: form.gender,
+        jabatan: form.jabatan.trim(),
+        bidang: form.bidang.trim(),
+        photoUrl: form.photoUrl.trim() || undefined,
+        quote: form.quote.trim() || undefined,
+        instagram: form.instagram.trim() || undefined
+      });
+    } else {
+      addOsisMember({
+        name: form.name.trim(),
+        gender: form.gender,
+        jabatan: form.jabatan.trim(),
+        bidang: form.bidang.trim(),
+        photoUrl: form.photoUrl.trim() || undefined,
+        quote: form.quote.trim() || undefined,
+        instagram: form.instagram.trim() || undefined
+      });
+    }
+    setIsModalOpen(false);
+  };
+
+  const handleDelete = (m: OsisMember) => {
+    requestDeleteConfirm({
+      itemName: `Pengurus OSIS "${m.name}" (${m.jabatan})`,
+      message: `Yakin ingin menghapus ${m.name} dari struktur organisasi OSIS?`,
+      onConfirm: () => deleteOsisMember(m.id)
+    });
+  };
+
+  const categories = ['Semua', 'Pengurus Inti', 'Seksi Bidang (Sekbid)', 'MPK & Pembina'];
+  const filteredList = osisList.filter(m => {
+    if (selectedCategory === 'Semua') return true;
+    return m.bidang === selectedCategory;
+  });
+
+  return (
+    <div className="space-y-8 pb-24 text-[#2D2D2A] dark:text-[#EAEAE2]">
+      {/* Header Banner */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-[#242422] border border-[#E0E0D8] dark:border-[#383832] p-6 sm:p-8 rounded-[32px] shadow-sm">
+        <div className="space-y-2">
+          <button
+            onClick={() => setCurrentView('home')}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#5A5A40] dark:text-[#C5C5B0] hover:underline mb-1 cursor-pointer"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Kembali ke Beranda</span>
+          </button>
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#F5F5F0] dark:bg-[#1E1E1C] text-[#5A5A40] dark:text-[#C5C5B0] text-xs font-bold uppercase tracking-wider border border-[#E0E0D8] dark:border-[#383832]">
+            <Crown className="w-3.5 h-3.5 text-amber-500" />
+            <span>Organisasi Siswa Intra Sekolah</span>
+          </div>
+          <h2 className="font-serif text-2xl sm:text-3xl lg:text-4xl font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">
+            Struktur Jabatan & Pengurus OSIS
+          </h2>
+          <p className="text-xs sm:text-sm text-[#8E8E85] dark:text-[#A4A49B] max-w-2xl leading-relaxed">
+            Mengenal seluruh jajaran Pengurus Inti dan Seksi Bidang (Sekbid) OSIS yang memimpin berbagai program kesiswaan, kepemimpinan, dan kreativitas siswa.
+          </p>
+        </div>
+
+        {isSuperAdmin && (
+          <button
+            id="btn-add-osis-member"
+            onClick={handleOpenAdd}
+            className="inline-flex items-center gap-2 px-5 py-3 bg-[#5A5A40] dark:bg-[#727252] hover:bg-[#484833] text-white text-xs font-bold uppercase tracking-wider rounded-2xl shadow-sm transition-all cursor-pointer shrink-0 active:scale-95"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Tambah Pengurus OSIS</span>
+          </button>
+        )}
+      </div>
+
+      {/* Filter Tabs */}
+      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
+        {categories.map((cat) => (
+          <button
+            key={cat}
+            onClick={() => setSelectedCategory(cat)}
+            className={`px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+              selectedCategory === cat
+                ? 'bg-[#5A5A40] dark:bg-[#727252] text-white font-bold shadow-xs'
+                : 'bg-white dark:bg-[#242422] border border-[#E0E0D8] dark:border-[#383832] text-[#5A5A40] dark:text-[#C5C5B0] hover:bg-[#F5F5F0]'
+            }`}
+          >
+            {cat}
+          </button>
+        ))}
+      </div>
+
+      {/* Members Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+        {filteredList.map((m, idx) => (
+          <ScrollEmboss key={m.id} delay={idx * 50} interactiveHover className="h-full">
+            <div className="h-full bg-white dark:bg-[#242422] border border-[#E0E0D8] dark:border-[#383832] rounded-[28px] overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col justify-between group">
+              {/* Photo & Gender Badge */}
+              <div className="aspect-[4/4] w-full bg-[#F5F5F0] dark:bg-[#1E1E1C] overflow-hidden relative">
+                {m.photoUrl ? (
+                  <img
+                    src={m.photoUrl}
+                    alt={m.name}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    loading="lazy"
+                  />
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center text-[#5A5A40]/40 dark:text-[#A4A485]/40">
+                    <User className="w-16 h-16" />
+                    <span className="text-[11px] font-semibold mt-1">Foto Belum Diunggah</span>
+                  </div>
+                )}
+                
+                {/* Jabatan Pill */}
+                <div className="absolute bottom-3 left-3 right-3">
+                  <span className="inline-block w-full text-center bg-black/75 backdrop-blur-md text-white px-3 py-1.5 rounded-xl text-[11px] font-bold truncate shadow-xs">
+                    {m.jabatan}
+                  </span>
+                </div>
+
+                {/* Gender Tag */}
+                <span className={`absolute top-3 left-3 px-2 py-0.5 rounded-lg text-[10px] font-extrabold uppercase shadow-xs ${
+                  m.gender === 'P' ? 'bg-rose-500 text-white' : 'bg-blue-600 text-white'
+                }`}>
+                  {m.gender === 'P' ? 'Perempuan (P)' : 'Laki-laki (L)'}
+                </span>
+              </div>
+
+              {/* Information */}
+              <div className="p-5 space-y-3 flex-1 flex flex-col justify-between">
+                <div className="space-y-1.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#8E8E85] dark:text-[#A4A49B]">
+                    {m.bidang || 'Pengurus OSIS'}
+                  </span>
+                  <h4 className="font-serif text-base font-bold text-[#2D2D2A] dark:text-[#F0F0EA] line-clamp-1 group-hover:text-[#5A5A40]">
+                    {m.name}
+                  </h4>
+                  {m.quote && (
+                    <p className="text-xs text-[#8E8E85] dark:text-[#A4A49B] italic line-clamp-2 leading-relaxed">
+                      "{m.quote}"
+                    </p>
+                  )}
+                </div>
+
+                {/* Social & Admin Controls */}
+                <div className="pt-3 border-t border-[#E0E0D8] dark:border-[#383832] flex items-center justify-between gap-2">
+                  {m.instagram ? (
+                    <a
+                      href={`https://instagram.com/${m.instagram.replace('@', '')}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-[#5A5A40] dark:text-[#C5C5B0] hover:underline flex items-center gap-1 font-semibold"
+                    >
+                      <Instagram className="w-3.5 h-3.5" />
+                      <span>{m.instagram.startsWith('@') ? m.instagram : `@${m.instagram}`}</span>
+                    </a>
+                  ) : (
+                    <span className="text-[10px] text-[#8E8E85] dark:text-[#A4A49B]">Warga SMAN 1</span>
+                  )}
+
+                  {isSuperAdmin && (
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => handleOpenEdit(m)}
+                        className="p-1.5 rounded-lg text-[#5A5A40] dark:text-[#C5C5B0] hover:bg-[#F5F5F0] dark:hover:bg-[#1E1E1C] text-xs cursor-pointer"
+                        title="Ubah data pengurus"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(m)}
+                        className="p-1.5 rounded-lg text-red-600 hover:bg-red-50 text-xs cursor-pointer"
+                        title="Hapus"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </ScrollEmboss>
+        ))}
+      </div>
+
+      {/* Add / Edit Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white dark:bg-[#242422] border border-[#E0E0D8] dark:border-[#383832] rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 my-auto max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-[#E0E0D8] dark:border-[#383832] pb-4">
+              <h3 className="font-serif text-lg font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">
+                {editingMember ? 'Ubah Pengurus OSIS' : 'Tambah Pengurus OSIS'}
+              </h3>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="p-2 text-[#8E8E85] hover:bg-[#F5F5F0] dark:hover:bg-[#1E1E1C] rounded-xl"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSave} className="space-y-4">
+              <div>
+                <label className="text-xs font-bold uppercase text-[#8E8E85] block mb-1">Nama Lengkap Siswa</label>
+                <input
+                  type="text"
+                  value={form.name}
+                  onChange={e => setForm({ ...form, name: e.target.value })}
+                  placeholder="Contoh: Muhammad Kevin Al-Fatih"
+                  className="w-full px-4 py-2.5 bg-[#F5F5F0] dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#383832] rounded-xl text-xs"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold uppercase text-[#8E8E85] block mb-1">Jenis Kelamin</label>
+                  <select
+                    value={form.gender}
+                    onChange={e => setForm({ ...form, gender: e.target.value as 'L' | 'P' })}
+                    className="w-full px-4 py-2.5 bg-[#F5F5F0] dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#383832] rounded-xl text-xs"
+                  >
+                    <option value="L">Laki-laki (L)</option>
+                    <option value="P">Perempuan (P)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-bold uppercase text-[#8E8E85] block mb-1">Kelompok Bidang</label>
+                  <select
+                    value={form.bidang}
+                    onChange={e => setForm({ ...form, bidang: e.target.value })}
+                    className="w-full px-4 py-2.5 bg-[#F5F5F0] dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#383832] rounded-xl text-xs"
+                  >
+                    <option value="Pengurus Inti">Pengurus Inti</option>
+                    <option value="Seksi Bidang (Sekbid)">Seksi Bidang (Sekbid)</option>
+                    <option value="MPK & Pembina">MPK & Pembina</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold uppercase text-[#8E8E85] block mb-1">Jabatan Spesifik</label>
+                <input
+                  type="text"
+                  value={form.jabatan}
+                  onChange={e => setForm({ ...form, jabatan: e.target.value })}
+                  placeholder="Contoh: Ketua Umum OSIS / Sekbid Teknologi"
+                  className="w-full px-4 py-2.5 bg-[#F5F5F0] dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#383832] rounded-xl text-xs"
+                  required
+                />
+              </div>
+
+              <MediaUploadField
+                label="Foto Pengurus OSIS"
+                value={form.photoUrl}
+                onChange={url => setForm({ ...form, photoUrl: url })}
+              />
+
+              <div>
+                <label className="text-xs font-bold uppercase text-[#8E8E85] block mb-1">Kutipan / Motto Kepemimpinan</label>
+                <input
+                  type="text"
+                  value={form.quote}
+                  onChange={e => setForm({ ...form, quote: e.target.value })}
+                  placeholder="Motto pengabdian..."
+                  className="w-full px-4 py-2.5 bg-[#F5F5F0] dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#383832] rounded-xl text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold uppercase text-[#8E8E85] block mb-1">Akun Instagram (Opsional)</label>
+                <input
+                  type="text"
+                  value={form.instagram}
+                  onChange={e => setForm({ ...form, instagram: e.target.value })}
+                  placeholder="@username"
+                  className="w-full px-4 py-2.5 bg-[#F5F5F0] dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#383832] rounded-xl text-xs"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-[#E0E0D8] dark:border-[#383832]">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-5 py-2.5 rounded-xl border border-[#E0E0D8] text-xs font-bold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 bg-[#5A5A40] text-white rounded-xl text-xs font-bold uppercase shadow-sm"
+                >
+                  Simpan Pengurus OSIS
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

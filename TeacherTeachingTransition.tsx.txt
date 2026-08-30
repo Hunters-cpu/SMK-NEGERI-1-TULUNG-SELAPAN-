@@ -1,0 +1,243 @@
+import React, { useEffect, useState } from 'react';
+import { Sparkles, Clock, Heart, BookOpen, GraduationCap, Smile, Star, Award, Lightbulb, Music } from 'lucide-react';
+
+interface TeacherTeachingTransitionProps {
+  onComplete: () => void;
+  onSkip?: () => void;
+}
+
+export const TeacherTeachingTransition: React.FC<TeacherTeachingTransitionProps> = ({
+  onComplete,
+  onSkip
+}) => {
+  const [progress, setProgress] = useState<number>(0);
+  const [secondsRemaining, setSecondsRemaining] = useState<number>(15);
+  const [phase, setPhase] = useState<1 | 2 | 3>(1);
+
+  // 15 seconds total transition
+  useEffect(() => {
+    const startTime = Date.now();
+    const duration = 15000; // 15 Detik
+
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      const pct = Math.min(100, (elapsed / duration) * 100);
+      setProgress(pct);
+      
+      const left = Math.max(0, Math.ceil((duration - elapsed) / 1000));
+      setSecondsRemaining(left);
+
+      if (elapsed < 5000) {
+        setPhase(1); // Suasana Kelas Ceria & Membuka Papan Tulis
+      } else if (elapsed < 11000) {
+        setPhase(2); // Guru Mendidik dengan Kasih & Interaksi Bahagia Siswa
+      } else {
+        setPhase(3); // Apresiasi Pendidik & Masuk Direktori Dewan Guru
+      }
+
+      if (elapsed >= duration) {
+        clearInterval(interval);
+        onComplete();
+      }
+    }, 40);
+
+    return () => clearInterval(interval);
+  }, [onComplete]);
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-[#181816] text-white overflow-hidden select-none">
+      {/* Warm Ambient Glow */}
+      <div className="absolute inset-0 bg-radial from-amber-600/20 via-stone-900/90 to-[#0F0F0D] pointer-events-none" />
+
+      {/* Floating Animated Icons & Happiness Sparkles */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-40">
+        <div className="absolute top-1/6 left-1/4 w-3 h-3 bg-yellow-300 rounded-full blur-[1px] animate-bounce" />
+        <div className="absolute top-1/4 right-1/4 text-amber-300 animate-pulse">
+          <Sparkles className="w-6 h-6" />
+        </div>
+        <div className="absolute bottom-1/3 left-1/5 text-rose-300 animate-ping">
+          <Heart className="w-5 h-5" />
+        </div>
+        <div className="absolute top-1/2 right-1/6 text-yellow-200 animate-spin">
+          <Star className="w-5 h-5" />
+        </div>
+        <div className="absolute bottom-1/4 right-1/3 text-emerald-300 animate-bounce">
+          <Lightbulb className="w-6 h-6" />
+        </div>
+      </div>
+
+      {/* Main Classroom Scene Box */}
+      <div className="relative w-full max-w-3xl h-[620px] px-4 flex flex-col items-center justify-center">
+
+        {/* 🏫 SCENE CONTAINER */}
+        <div className="w-full bg-[#FAF8F5] text-stone-900 rounded-3xl p-6 sm:p-8 border-4 border-amber-800 shadow-2xl relative overflow-hidden flex flex-col items-center justify-between min-h-[460px] animate-scaleUp">
+          
+          {/* Top Classroom Banner */}
+          <div className="w-full flex items-center justify-between pb-3 border-b-2 border-stone-200">
+            <div className="flex items-center gap-2 text-amber-900">
+              <GraduationCap className="w-6 h-6" />
+              <span className="font-serif text-sm font-bold uppercase tracking-wider">
+                Ruang Inspirasi & Dewan Pendidik
+              </span>
+            </div>
+            <div className="flex items-center gap-1 text-xs font-bold bg-amber-100 text-amber-900 px-3 py-1 rounded-full border border-amber-300">
+              <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500" />
+              <span>Belajar Penuh Keceriaan</span>
+            </div>
+          </div>
+
+          {/* Center Interactive Classroom Animation */}
+          <div className="w-full flex flex-col sm:flex-row items-center justify-center gap-6 my-4">
+            
+            {/* Green Chalkboard */}
+            <div className="w-full sm:w-1/2 bg-[#1B3B2B] text-emerald-100 rounded-2xl p-5 border-4 border-[#8B5A2B] shadow-inner flex flex-col justify-between h-56 relative overflow-hidden">
+              <div className="absolute top-2 right-2 flex gap-1 opacity-60">
+                <span className="w-2 h-2 rounded-full bg-white/40" />
+                <span className="w-2 h-2 rounded-full bg-white/40" />
+              </div>
+              
+              <div>
+                <p className="font-mono text-[11px] text-amber-300 tracking-wider">Materi Hari Ini:</p>
+                <h4 className="font-serif text-base sm:text-lg font-bold text-white mt-1">
+                  "Menumbuhkan Budi Pekerti & Kecerdasan Karakter"
+                </h4>
+              </div>
+
+              <div className="space-y-1 text-xs text-emerald-200 font-sans border-t border-emerald-700/60 pt-2">
+                <p className="flex items-center gap-1.5">
+                  <Star className="w-3.5 h-3.5 text-yellow-300 fill-yellow-300 shrink-0" />
+                  <span>Guru Hebat Menginspirasi Jiwa</span>
+                </p>
+                <p className="flex items-center gap-1.5">
+                  <Smile className="w-3.5 h-3.5 text-yellow-200 shrink-0" />
+                  <span>Siswa Belajar dengan Senyum Bahagia</span>
+                </p>
+              </div>
+
+              {/* Chalk pieces */}
+              <div className="flex gap-2 self-end">
+                <span className="w-4 h-1.5 bg-white rounded-xs" />
+                <span className="w-3 h-1.5 bg-yellow-200 rounded-xs" />
+              </div>
+            </div>
+
+            {/* Joyful Animated Characters & Scene Details */}
+            <div className="w-full sm:w-1/2 flex flex-col items-center justify-center text-center space-y-3">
+              
+              {/* Teacher and Students Happiness Avatars */}
+              <div className="flex items-center justify-center gap-3">
+                {/* Teacher Avatar */}
+                <div className="relative group">
+                  <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-amber-600 to-yellow-400 p-1 shadow-lg animate-pulse">
+                    <img
+                      src="https://images.unsplash.com/photo-1577896851231-70ef18881754?auto=format&fit=crop&w=400&q=80"
+                      alt="Guru Mengajar"
+                      className="w-full h-full rounded-full object-cover"
+                    />
+                  </div>
+                  <span className="absolute -bottom-2 -right-1 bg-amber-700 text-white text-[10px] font-bold px-2 py-0.5 rounded-full border border-white">
+                    Guru
+                  </span>
+                </div>
+
+                {/* Animated Connection Arc */}
+                <div className="text-amber-500 animate-bounce">
+                  <Sparkles className="w-6 h-6" />
+                </div>
+
+                {/* Happy Students Group */}
+                <div className="flex -space-x-4">
+                  <div className="w-14 h-14 rounded-full border-2 border-white shadow-md overflow-hidden bg-rose-100">
+                    <img
+                      src="https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=200&q=80"
+                      alt="Siswa Bahagia 1"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div className="w-14 h-14 rounded-full border-2 border-white shadow-md overflow-hidden bg-blue-100">
+                    <img
+                      src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80"
+                      alt="Siswa Bahagia 2"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div className="w-14 h-14 rounded-full border-2 border-white shadow-md overflow-hidden bg-emerald-100">
+                    <img
+                      src="https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=200&q=80"
+                      alt="Siswa Bahagia 3"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Happiness Narrative Text based on phase */}
+              <div className="min-h-[60px] flex flex-col justify-center">
+                {phase === 1 && (
+                  <p className="font-serif text-sm font-bold text-stone-800 animate-fadeIn">
+                    "Selamat Pagi Semuanya! Mari kita mulai hari ini dengan rasa syukur dan semangat belajar yang tinggi."
+                  </p>
+                )}
+                {phase === 2 && (
+                  <p className="font-serif text-sm font-bold text-amber-900 animate-fadeIn">
+                    "Guru mendidik dengan ketulusan hati, menciptakan ruang kelas yang ramah, interaktif, dan penuh tawa ceria."
+                  </p>
+                )}
+                {phase === 3 && (
+                  <p className="font-serif text-sm font-bold text-emerald-900 animate-fadeIn">
+                    "Menyiapkan profil lengkap Kepala Sekolah, Jajaran Wakil Kepala Sekolah, Guru Mata Pelajaran, dan Staf..."
+                  </p>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 text-xs text-stone-500">
+                <Award className="w-4 h-4 text-amber-600" />
+                <span>Pahlawan Tanpa Tanda Jasa Pembina Masa Depan Bangsa</span>
+              </div>
+            </div>
+
+          </div>
+
+          {/* Bottom Quote */}
+          <div className="w-full bg-amber-50/80 p-3 rounded-2xl border border-amber-200 text-center">
+            <p className="font-serif text-xs text-stone-700 italic">
+              "Pendidikan bukan sekadar mengisi wadah, melainkan menyalakan api rasa ingin tahu dan cinta belajar."
+            </p>
+          </div>
+
+        </div>
+
+        {/* ⏳ BOTTOM CONTROLS & 15-SECOND COUNTDOWN */}
+        <div className="w-full max-w-3xl mt-4 flex flex-col gap-2 z-40">
+          <div className="flex items-center justify-between text-xs text-stone-300">
+            <span className="flex items-center gap-1.5 font-medium">
+              <Clock className="w-3.5 h-3.5 text-amber-400" />
+              <span>Transisi Sinematik Ruang Guru (Sisa {secondsRemaining} Detik)</span>
+            </span>
+            <span className="font-mono text-amber-300 font-bold">{Math.round(progress)}%</span>
+          </div>
+
+          <div className="w-full h-1.5 bg-stone-800 rounded-full overflow-hidden border border-white/10">
+            <div
+              className="h-full bg-gradient-to-r from-amber-500 via-yellow-400 to-emerald-400 transition-all duration-75 rounded-full"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+
+          <div className="flex justify-end pt-1">
+            {onSkip && (
+              <button
+                type="button"
+                onClick={onSkip}
+                className="px-4 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold cursor-pointer hover:scale-105 transition-all border border-white/20 shadow-xs"
+              >
+                Lewati Animasi &raquo;
+              </button>
+            )}
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
+};

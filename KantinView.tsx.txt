@@ -1,0 +1,576 @@
+import React, { useState } from 'react';
+import { useApp } from '../context/AppContext';
+import { CanteenItem, CanteenOrder } from '../types';
+import { 
+  UtensilsCrossed, 
+  ShoppingBag, 
+  Plus, 
+  Edit3, 
+  Trash2, 
+  CheckCircle, 
+  Clock, 
+  Search, 
+  Send, 
+  Sparkles,
+  Coffee,
+  X
+} from 'lucide-react';
+import { MediaUploadField } from '../components/MediaUploadField';
+
+export const KantinView: React.FC = () => {
+  const { 
+    canteenItems, 
+    addCanteenItem, 
+    updateCanteenItem, 
+    deleteCanteenItem, 
+    canteenOrders, 
+    addCanteenOrder, 
+    updateCanteenOrderStatus, 
+    authSession,
+    requestDeleteConfirm,
+    hasAdminScope,
+    showToast
+  } = useApp();
+
+  const [activeCategory, setActiveCategory] = useState<string>('Semua');
+  const [cart, setCart] = useState<{ [id: string]: number }>({});
+  const [buyerName, setBuyerName] = useState<string>(authSession.name || '');
+  const [className, setClassName] = useState<string>('');
+  const [pickupTime, setPickupTime] = useState<string>('Istirahat 1 (09:45)');
+  const [notes, setNotes] = useState<string>('');
+
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [editingItem, setEditingItem] = useState<CanteenItem | null>(null);
+
+  const [form, setForm] = useState({
+    name: '',
+    stallName: 'Stand Kantin Utama',
+    category: 'Makanan Berat' as CanteenItem['category'],
+    price: 10000,
+    photoUrl: '',
+    description: '',
+    isAvailable: true
+  });
+
+  const canManage = hasAdminScope('canteen') || authSession.role === 'super_admin';
+
+  const filteredItems = (canteenItems || []).filter(item => {
+    return activeCategory === 'Semua' || item.category === activeCategory;
+  });
+
+  const addToCart = (id: string) => {
+    setCart(prev => ({ ...prev, [id]: (prev[id] || 0) + 1 }));
+  };
+
+  const removeFromCart = (id: string) => {
+    setCart(prev => {
+      const next = { ...prev };
+      if (next[id] > 1) {
+        next[id] -= 1;
+      } else {
+        delete next[id];
+      }
+      return next;
+    });
+  };
+
+  const cartTotal = Object.entries(cart).reduce((sum: number, [id, qty]: [string, any]) => {
+    const item = canteenItems.find(i => i.id === id);
+    const itemPrice = Number(item?.price || 0);
+    const quantity = Number(qty || 0);
+    return sum + (itemPrice * quantity);
+  }, 0);
+
+  const handleCheckout = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!buyerName.trim() || !className.trim() || Object.keys(cart).length === 0) {
+      showToast('Mohon pilih menu makanan dan lengkapi nama serta kelas.', 'warning');
+      return;
+    }
+
+    const itemsSummary = Object.entries(cart).map(([id, qty]) => {
+      const item = canteenItems.find(i => i.id === id);
+      return {
+        itemId: id,
+        name: item?.name || 'Menu',
+        price: Number(item?.price || 0),
+        quantity: Number(qty)
+      };
+    });
+
+    addCanteenOrder({
+      studentName: buyerName.trim(),
+      className: className.trim(),
+      items: itemsSummary,
+      totalPrice: cartTotal,
+      pickupTime,
+      notes: notes.trim() || undefined
+    });
+
+    setCart({});
+    setNotes('');
+    showToast('Pesanan kantin berhasil dikirim! Silakan ambil pada jam istirahat pilihan.', 'success');
+  };
+
+  // Add / Edit Item Handlers
+  const handleOpenAdd = () => {
+    setEditingItem(null);
+    setForm({
+      name: '',
+      stallName: 'Stand Kantin Utama',
+      category: 'Makanan Berat',
+      price: 10000,
+      photoUrl: '',
+      description: '',
+      isAvailable: true
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEdit = (item: CanteenItem) => {
+    setEditingItem(item);
+    setForm({
+      name: item.name,
+      stallName: item.stallName,
+      category: item.category,
+      price: item.price,
+      photoUrl: item.photoUrl || '',
+      description: item.description || '',
+      isAvailable: item.isAvailable
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleSubmitItem = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.name.trim()) return;
+
+    if (editingItem) {
+      updateCanteenItem(editingItem.id, {
+        name: form.name.trim(),
+        stallName: form.stallName.trim(),
+        category: form.category,
+        price: Number(form.price),
+        photoUrl: form.photoUrl.trim() || undefined,
+        description: form.description.trim() || undefined,
+        isAvailable: form.isAvailable
+      });
+    } else {
+      addCanteenItem({
+        name: form.name.trim(),
+        stallName: form.stallName.trim(),
+        category: form.category,
+        price: Number(form.price),
+        photoUrl: form.photoUrl.trim() || undefined,
+        description: form.description.trim() || undefined,
+        isAvailable: form.isAvailable
+      });
+    }
+    setIsModalOpen(false);
+  };
+
+  const handleDeleteItem = (item: CanteenItem) => {
+    requestDeleteConfirm({
+      itemName: `Menu "${item.name}"`,
+      message: `Hapus menu makanan "${item.name}" dari kantin?`,
+      onConfirm: () => deleteCanteenItem(item.id)
+    });
+  };
+
+  return (
+    <div className="space-y-8 pb-20 animate-fade-in">
+      {/* Header Banner */}
+      <div className="relative overflow-hidden bg-gradient-to-br from-[#5A5A40] to-[#3A3A29] text-white p-6 sm:p-10 rounded-[32px] shadow-lg">
+        <div className="relative z-10 max-w-3xl space-y-3">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1 bg-white/20 backdrop-blur-md rounded-full text-xs font-bold uppercase tracking-widest text-amber-200">
+            <UtensilsCrossed className="w-4 h-4" />
+            <span>Menu 14: Kantin Sehat & Pre-Order Makanan</span>
+          </div>
+          <h1 className="font-serif text-2xl sm:text-4xl font-bold tracking-tight">
+            Menu Kantin & Pre-Order Istirahat
+          </h1>
+          <p className="text-sm sm:text-base text-white/85 leading-relaxed">
+            Daftar hidangan higienis kantin sekolah lengkap dengan harga. Siswa dan guru dapat memesan lebih awal (pre-order) agar makanan siap santap saat bel istirahat berbunyi tanpa perlu antre panjang.
+          </p>
+
+          {canManage && (
+            <div className="pt-2">
+              <button
+                onClick={handleOpenAdd}
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-amber-400 hover:bg-amber-300 text-[#2D2D2A] font-bold rounded-2xl text-xs sm:text-sm shadow-md transition-transform active:scale-95 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Tambah Menu Makanan</span>
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Category Tabs */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-2">
+        {['Semua', 'Makanan Berat', 'Camilan', 'Minuman'].map(cat => (
+          <button
+            key={cat}
+            onClick={() => setActiveCategory(cat)}
+            className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
+              activeCategory === cat
+                ? 'bg-[#5A5A40] text-white shadow-xs'
+                : 'bg-white dark:bg-[#1E1E1C] text-[#8E8E85] border border-[#E0E0D8] dark:border-[#383832] hover:text-[#2D2D2A] dark:hover:text-white'
+            }`}
+          >
+            {cat}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Food Menu Items */}
+        <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {filteredItems.map(item => {
+            const countInCart = cart[item.id] || 0;
+            return (
+              <div
+                key={item.id}
+                className="bg-white dark:bg-[#1E1E1C] rounded-[24px] border border-[#E0E0D8] dark:border-[#383832] shadow-sm overflow-hidden flex flex-col justify-between"
+              >
+                <div>
+                  <div className="relative aspect-[16/10] w-full overflow-hidden bg-neutral-100 dark:bg-neutral-800">
+                    <img
+                      src={item.photoUrl || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&auto=format&fit=crop&q=80'}
+                      alt={item.name}
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute top-2 left-2 px-2.5 py-0.5 bg-black/60 backdrop-blur-xs text-white text-[10px] font-bold rounded-md">
+                      {item.stallName}
+                    </div>
+                  </div>
+
+                  <div className="p-4 space-y-1.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <h4 className="font-serif text-base font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">
+                        {item.name}
+                      </h4>
+                      <span className="font-bold text-xs text-[#8C4A32] dark:text-[#E07A5F] shrink-0">
+                        Rp {item.price.toLocaleString('id-ID')}
+                      </span>
+                    </div>
+                    {item.description && (
+                      <p className="text-xs text-[#8E8E85] line-clamp-2">
+                        {item.description}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="p-3 bg-[#F8F8F5] dark:bg-[#282825] border-t border-[#E0E0D8]/60 dark:border-[#383832]/60 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {countInCart > 0 && (
+                      <button
+                        onClick={() => removeFromCart(item.id)}
+                        className="w-7 h-7 rounded-lg bg-rose-100 text-rose-700 font-bold flex items-center justify-center text-sm cursor-pointer"
+                      >
+                        -
+                      </button>
+                    )}
+                    {countInCart > 0 && (
+                      <span className="font-bold text-xs text-[#2D2D2A] dark:text-[#F0F0EA] px-1">
+                        {countInCart}
+                      </span>
+                    )}
+                    <button
+                      onClick={() => addToCart(item.id)}
+                      className="px-3 py-1.5 bg-[#5A5A40] hover:bg-[#484833] text-white text-xs font-bold rounded-lg cursor-pointer flex items-center gap-1 active:scale-95"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>{countInCart > 0 ? 'Tambah' : 'Pesan'}</span>
+                    </button>
+                  </div>
+
+                  {canManage && (
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => handleOpenEdit(item)} className="text-[11px] text-[#5A5A40] dark:text-[#D1D1BE] hover:underline font-semibold cursor-pointer">
+                        Edit
+                      </button>
+                      <button onClick={() => handleDeleteItem(item)} className="text-[11px] text-rose-600 hover:underline font-semibold cursor-pointer">
+                        Hapus
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Cart & Checkout Panel */}
+        <div className="space-y-6">
+          <div className="bg-white dark:bg-[#1E1E1C] p-6 rounded-[28px] border border-[#E0E0D8] dark:border-[#383832] shadow-sm space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E0E0D8] dark:border-[#383832]">
+              <div className="flex items-center gap-2">
+                <ShoppingBag className="w-5 h-5 text-[#5A5A40] dark:text-[#A4A485]" />
+                <h3 className="font-serif text-base font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">
+                  Keranjang Pesanan
+                </h3>
+              </div>
+              <span className="text-xs font-bold text-[#8E8E85]">
+                {Object.values(cart).reduce((a: number, b: any) => a + Number(b || 0), 0)} item
+              </span>
+            </div>
+
+            {Object.keys(cart).length === 0 ? (
+              <p className="text-xs text-[#8E8E85] text-center py-6">
+                Belum ada menu yang dipilih. Klik tombol <strong>Pesan</strong> pada menu makanan di sebelah kiri.
+              </p>
+            ) : (
+              <form onSubmit={handleCheckout} className="space-y-4">
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {Object.entries(cart).map(([id, qty]) => {
+                    const item = canteenItems.find(i => i.id === id);
+                    if (!item) return null;
+                    return (
+                      <div key={id} className="flex items-center justify-between text-xs py-1 border-b border-dashed border-[#E0E0D8] dark:border-[#383832]">
+                        <span className="font-semibold text-[#2D2D2A] dark:text-[#ECECE4]">
+                          {item.name} <strong className="text-[#5A5A40]">x{Number(qty)}</strong>
+                        </span>
+                        <span className="font-bold text-[#8C4A32] dark:text-[#E07A5F]">
+                          Rp {(Number(item.price || 0) * Number(qty || 0)).toLocaleString('id-ID')}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="p-3 bg-[#F8F8F5] dark:bg-[#282825] rounded-xl flex items-center justify-between text-xs font-bold">
+                  <span>Total Tagihan:</span>
+                  <span className="text-sm text-[#8C4A32] dark:text-[#E07A5F]">
+                    Rp {cartTotal.toLocaleString('id-ID')}
+                  </span>
+                </div>
+
+                <div className="space-y-3 pt-2">
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">Nama Pemesan *</label>
+                    <input
+                      type="text"
+                      required
+                      value={buyerName}
+                      onChange={e => setBuyerName(e.target.value)}
+                      placeholder="Nama Siswa / Guru"
+                      className="w-full px-3 py-2 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs text-[#2D2D2A] dark:text-[#EAEAE2]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">Kelas / Ruangan *</label>
+                    <input
+                      type="text"
+                      required
+                      value={className}
+                      onChange={e => setClassName(e.target.value)}
+                      placeholder="XII MIPA 1"
+                      className="w-full px-3 py-2 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs text-[#2D2D2A] dark:text-[#EAEAE2]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">Waktu Pengambilan</label>
+                    <select
+                      value={pickupTime}
+                      onChange={e => setPickupTime(e.target.value)}
+                      className="w-full px-3 py-2 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs font-semibold text-[#2D2D2A] dark:text-[#EAEAE2]"
+                    >
+                      <option value="Istirahat 1 (09:45)">Istirahat 1 (09:45 WIB)</option>
+                      <option value="Istirahat 2 (12:15)">Istirahat 2 (12:15 WIB / Dzuhur)</option>
+                      <option value="Pulang Sekolah (15:30)">Pulang Sekolah (15:30 WIB)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">Catatan Tambahan</label>
+                    <input
+                      type="text"
+                      value={notes}
+                      onChange={e => setNotes(e.target.value)}
+                      placeholder="Contoh: Sambal dipisah, es sedikit..."
+                      className="w-full px-3 py-2 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs text-[#2D2D2A] dark:text-[#EAEAE2]"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-3 bg-[#5A5A40] hover:bg-[#484833] text-white font-bold rounded-xl text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+                  >
+                    <Send className="w-4 h-4" />
+                    <span>Konfirmasi Pre-Order</span>
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+
+          {/* Admin Order Queue */}
+          {canManage && (
+            <div className="bg-white dark:bg-[#1E1E1C] p-6 rounded-[28px] border border-[#E0E0D8] dark:border-[#383832] shadow-sm space-y-4">
+              <h3 className="font-serif text-base font-bold text-[#2D2D2A] dark:text-[#F0F0EA] pb-2 border-b border-[#E0E0D8] dark:border-[#383832]">
+                Antrean Pesanan Masuk ({canteenOrders.length})
+              </h3>
+
+              <div className="space-y-3 max-h-60 overflow-y-auto">
+                {canteenOrders.map(ord => {
+                  const statusMap: Record<string, string> = {
+                    pending: 'Menunggu',
+                    preparing: 'Sedang Dimasak',
+                    ready: 'Siap Diambil',
+                    completed: 'Selesai',
+                    cancelled: 'Dibatalkan'
+                  };
+                  const displayStatus = statusMap[ord.status] || ord.status;
+                  const isReady = ord.status === 'ready' || ord.status === 'Siap Diambil';
+                  const isCompleted = ord.status === 'completed' || ord.status === 'Selesai';
+
+                  return (
+                    <div key={ord.id} className="p-3 bg-[#F8F8F5] dark:bg-[#282825] rounded-xl border border-[#E0E0D8]/60 dark:border-[#383832]/60 text-xs space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">
+                          {ord.studentName || (ord as any).buyerName || 'Siswa'} ({ord.className})
+                        </span>
+                        <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${
+                          isReady ? 'bg-emerald-100 text-emerald-800' :
+                          isCompleted ? 'bg-blue-100 text-blue-800' :
+                          'bg-amber-100 text-amber-800'
+                        }`}>
+                          {displayStatus}
+                        </span>
+                      </div>
+
+                      {/* Item list */}
+                      <div className="space-y-1 py-0.5">
+                        {Array.isArray(ord.items) ? (
+                          ord.items.map((item, idx) => (
+                            <div key={idx} className="flex items-center justify-between text-[11px] text-[#5A5A40] dark:text-[#C5C5B0]">
+                              <span>• {item.name} <strong className="text-[#2D2D2A] dark:text-[#ECECE4]">x{item.quantity}</strong></span>
+                              <span className="font-medium">Rp {(item.price * item.quantity).toLocaleString('id-ID')}</span>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-[#5A5A40] dark:text-[#A4A485]">{String(ord.items)}</p>
+                        )}
+                      </div>
+
+                      {ord.notes && (
+                        <p className="text-[10px] italic text-[#8E8E85] bg-white dark:bg-[#1E1E1C] px-2 py-1 rounded-md border border-[#E0E0D8]/50">
+                          Catatan: "{ord.notes}"
+                        </p>
+                      )}
+
+                      <div className="flex items-center justify-between text-[10px] text-[#8E8E85] pt-1 border-t border-dashed border-[#E0E0D8] dark:border-[#383832]">
+                        <span>Ambil: {ord.pickupTime}</span>
+                        <span className="font-bold text-[#8C4A32] dark:text-[#E07A5F]">Total: Rp {ord.totalPrice.toLocaleString('id-ID')}</span>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                        {(['pending', 'preparing', 'ready', 'completed'] as const).map(st => (
+                          <button
+                            key={st}
+                            type="button"
+                            onClick={() => updateCanteenOrderStatus(ord.id, st)}
+                            className={`px-2 py-0.5 rounded text-[9px] font-bold cursor-pointer transition-colors ${
+                              ord.status === st || ord.status === statusMap[st] ? 'bg-[#5A5A40] text-white' : 'bg-white dark:bg-[#1E1E1C] text-[#8E8E85] border border-[#E0E0D8]/60 dark:border-[#383832]/60'
+                            }`}
+                          >
+                            {statusMap[st]}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Add / Edit Item Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white dark:bg-[#1E1E1C] w-full max-w-md rounded-[28px] border border-[#E0E0D8] dark:border-[#383832] shadow-2xl overflow-hidden animate-scale-in">
+            <div className="p-5 border-b border-[#E0E0D8] dark:border-[#383832] flex items-center justify-between">
+              <h3 className="font-serif text-lg font-bold text-[#2D2D2A] dark:text-[#EAEAE2]">
+                {editingItem ? 'Edit Menu Kantin' : 'Tambah Menu Kantin Baru'}
+              </h3>
+              <button onClick={() => setIsModalOpen(false)} className="p-2 text-[#8E8E85] cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleSubmitItem} className="p-5 space-y-4">
+              <div>
+                <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">Nama Makanan / Minuman *</label>
+                <input
+                  type="text"
+                  required
+                  value={form.name}
+                  onChange={e => setForm({ ...form, name: e.target.value })}
+                  placeholder="Contoh: Nasi Goreng Spesial Telur"
+                  className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">Stand / Gerai *</label>
+                  <input
+                    type="text"
+                    required
+                    value={form.stallName}
+                    onChange={e => setForm({ ...form, stallName: e.target.value })}
+                    placeholder="Stand Bu Siti"
+                    className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">Kategori *</label>
+                  <select
+                    value={form.category}
+                    onChange={e => setForm({ ...form, category: e.target.value as any })}
+                    className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs font-semibold text-[#2D2D2A] dark:text-[#EAEAE2]"
+                  >
+                    <option value="Makanan Berat">Makanan Berat</option>
+                    <option value="Camilan">Camilan</option>
+                    <option value="Minuman">Minuman</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">Harga (Rp) *</label>
+                <input
+                  type="number"
+                  min={0}
+                  step={500}
+                  required
+                  value={form.price}
+                  onChange={e => setForm({ ...form, price: Number(e.target.value) })}
+                  className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+                />
+              </div>
+
+              <MediaUploadField
+                label="Foto Makanan (URL / Upload)"
+                value={form.photoUrl}
+                onChange={url => setForm({ ...form, photoUrl: url })}
+                placeholder="https://..."
+              />
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-xs font-bold text-[#8E8E85]">Batal</button>
+                <button type="submit" className="px-5 py-2 bg-[#5A5A40] text-white text-xs font-bold rounded-xl">Simpan</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

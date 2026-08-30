@@ -1,0 +1,249 @@
+import React from 'react';
+import { AppProvider, useApp } from './context/AppContext';
+import { Header } from './components/Header';
+import { BottomNav } from './components/BottomNav';
+import { ConfirmModal } from './components/ConfirmModal';
+import { AuthModal } from './components/AuthModal';
+import { ClassDoorBookTransition } from './components/ClassDoorBookTransition';
+import { TeacherTeachingTransition } from './components/TeacherTeachingTransition';
+import { VisitorCounter } from './components/VisitorCounter';
+import { HomeView } from './views/HomeView';
+import { ActivitiesView } from './views/ActivitiesView';
+import { AnnouncementsView } from './views/AnnouncementsView';
+import { ClassesView } from './views/ClassesView';
+import { TeachersView } from './views/TeachersView';
+import { EskulView } from './views/EskulView';
+import { OsisView } from './views/OsisView';
+import { ArchivedPostsView } from './views/ArchivedPostsView';
+import { AdminPanelView } from './views/AdminPanelView';
+import { AlumniView } from './views/AlumniView';
+import { AchievementsView } from './views/AchievementsView';
+import { AcademicCalendarView } from './views/AcademicCalendarView';
+import { ClassSchedulesView } from './views/ClassSchedulesView';
+import { LibraryView } from './views/LibraryView';
+import { UksView } from './views/UksView';
+import { ContactView } from './views/ContactView';
+import { InternalMessagesView } from './views/InternalMessagesView';
+import { SchoolHistoryView } from './views/SchoolHistoryView';
+import { PhotoPrintOrdersView } from './views/PhotoPrintOrdersView';
+import { SchoolTopRanksView } from './views/SchoolTopRanksView';
+import { KantinView } from './views/KantinView';
+import { LostAndFoundView } from './views/LostAndFoundView';
+import { StudyClubsView } from './views/StudyClubsView';
+import { TeacherNotesView } from './views/TeacherNotesView';
+import { CleaningScheduleView } from './views/CleaningScheduleView';
+import { ParentCornerView } from './views/ParentCornerView';
+import { GoogleWorkspaceHubView } from './views/GoogleWorkspaceHubView';
+import { HtmlExportView } from './views/HtmlExportView';
+import { School, Shield, ShieldCheck, CheckCircle, AlertCircle, Info, X, Sliders } from 'lucide-react';
+
+const ToastContainer: React.FC = () => {
+  const { toasts, removeToast, hideOnScreenNotifications } = useApp();
+
+  if (hideOnScreenNotifications || toasts.length === 0) return null;
+
+  return (
+    <div className="fixed bottom-24 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none">
+      {toasts.map(toast => {
+        let bg = 'bg-[#2D2D2A] text-white border-[#5A5A40]';
+        let Icon = Info;
+
+        if (toast.type === 'success') {
+          bg = 'bg-emerald-900 text-emerald-50 border-emerald-700';
+          Icon = CheckCircle;
+        } else if (toast.type === 'error') {
+          bg = 'bg-rose-900 text-rose-50 border-rose-700';
+          Icon = AlertCircle;
+        } else if (toast.type === 'warning') {
+          bg = 'bg-amber-900 text-amber-50 border-amber-700';
+          Icon = AlertCircle;
+        }
+
+        return (
+          <div
+            key={toast.id}
+            className={`pointer-events-auto flex items-start gap-3 p-3.5 rounded-2xl shadow-xl border text-xs font-medium backdrop-blur-md animate-fade-in ${bg}`}
+          >
+            <Icon className="w-4 h-4 shrink-0 mt-0.5" />
+            <p className="flex-1 leading-relaxed">{toast.message}</p>
+            <button
+              onClick={() => removeToast(toast.id)}
+              className="opacity-70 hover:opacity-100 p-0.5 rounded cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+const MainLayout: React.FC = () => {
+  const {
+    currentView,
+    setCurrentView,
+    schoolInfo,
+    authSession,
+    isAdminPanelOpen,
+    setIsAdminPanelOpen,
+    isAuthModalOpen,
+    setIsAuthModalOpen,
+    isOpeningClass,
+    openingClassData,
+    completeClassTransition,
+    cancelClassTransition,
+    isOpeningEskul,
+    openingEskulData,
+    completeEskulTransition,
+    cancelEskulTransition,
+    isOpeningTeacher,
+    completeTeacherTransition,
+    cancelTeacherTransition
+  } = useApp();
+
+  const isShowingAdminPanel = currentView === 'admin_panel' || isAdminPanelOpen;
+
+  return (
+    <div className="min-h-screen bg-[#F5F5F0] dark:bg-[#121211] text-[#2D2D2A] dark:text-[#EAEAE2] flex flex-col font-sans selection:bg-[#5A5A40] selection:text-white transition-colors duration-200">
+      {/* Sticky Header with branding, cloud sync status, and login triggers */}
+      <Header onOpenAuth={() => setIsAuthModalOpen(true)} />
+
+      {/* Admin Utama Quick Access Notification Banner */}
+      {authSession.role === 'super_admin' && !isShowingAdminPanel && (
+        <div className="bg-[#8C4A32] text-white px-4 py-2 text-xs font-semibold shadow-inner">
+          <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4" />
+              <span>👑 Hak Akses Penuh: <strong>Admin Utama</strong> (Pembuat: {schoolInfo.creatorName || 'Waa-O51W'}).</span>
+            </div>
+            <button
+              onClick={() => {
+                setIsAdminPanelOpen(true);
+                setCurrentView('admin_panel');
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1 bg-white text-[#8C4A32] hover:bg-[#F5F5F0] font-bold rounded-lg text-xs transition-all cursor-pointer active:scale-95 shadow-sm shrink-0"
+            >
+              <Sliders className="w-3.5 h-3.5" />
+              <span>Buka Panel Admin</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Main Content Area */}
+      <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8">
+        {isShowingAdminPanel ? (
+          <AdminPanelView />
+        ) : (
+          <>
+            {currentView === 'home' && <HomeView />}
+            {currentView === 'activities' && <ActivitiesView />}
+            {currentView === 'announcements' && <AnnouncementsView />}
+            {currentView === 'classes' && <ClassesView />}
+            {currentView === 'eskul' && <EskulView />}
+            {currentView === 'teachers' && <TeachersView />}
+            {currentView === 'osis' && <OsisView />}
+            {currentView === 'archived_posts' && <ArchivedPostsView />}
+            {currentView === 'alumni' && <AlumniView />}
+            {currentView === 'achievements' && <AchievementsView />}
+            {currentView === 'calendar' && <AcademicCalendarView />}
+            {currentView === 'schedules' && <ClassSchedulesView />}
+            {currentView === 'library' && <LibraryView />}
+            {currentView === 'uks' && <UksView />}
+            {currentView === 'contact' && <ContactView />}
+            {currentView === 'internal_messages' && <InternalMessagesView />}
+            {currentView === 'history' && <SchoolHistoryView />}
+            {currentView === 'photo_orders' && <PhotoPrintOrdersView />}
+            {currentView === 'school_ranks' && <SchoolTopRanksView />}
+            {currentView === 'canteen' && <KantinView />}
+            {currentView === 'lost_found' && <LostAndFoundView />}
+            {currentView === 'study_clubs' && <StudyClubsView />}
+            {currentView === 'teacher_notes' && <TeacherNotesView />}
+            {currentView === 'cleaning_schedule' && <CleaningScheduleView />}
+            {currentView === 'parenting' && <ParentCornerView />}
+            {currentView === 'google_workspace' && <GoogleWorkspaceHubView initialTab="calendar" />}
+            {currentView === 'google_calendar' && <GoogleWorkspaceHubView initialTab="calendar" />}
+            {currentView === 'gmail' && <GoogleWorkspaceHubView initialTab="gmail" />}
+            {currentView === 'google_classroom' && <GoogleWorkspaceHubView initialTab="classroom" />}
+            {currentView === 'html_export' && <HtmlExportView />}
+          </>
+        )}
+      </main>
+
+      {/* Modern Warm Organic Clean Footer */}
+      <footer className="border-t border-[#E0E0D8] dark:border-[#383832] bg-white/80 dark:bg-[#1A1A18]/80 backdrop-blur-sm mt-auto pb-24 md:pb-8 pt-8 space-y-6 transition-colors duration-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          {/* Privacy-First Unique Visitor Counter Widget */}
+          <VisitorCounter />
+        </div>
+
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-[#8E8E85] dark:text-[#A4A49B] pt-2 border-t border-[#E0E0D8]/60 dark:border-[#383832]/60">
+          <div className="flex items-center gap-2">
+            <School className="w-4 h-4 text-[#5A5A40] dark:text-[#A4A485]" />
+            <span className="font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">{schoolInfo.name}</span>
+            <span>• Galeri Kenangan & Portal Informasi</span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-4 text-[#8E8E85] dark:text-[#A4A49B]">
+            <span className="flex items-center gap-1">
+              <Shield className="w-3.5 h-3.5 text-[#5A5A40] dark:text-[#A4A485]" />
+              <span className="text-[#5A5A40] dark:text-[#C5C5B0] font-medium">Pusat Data Cloud</span>
+            </span>
+            <span>•</span>
+            <span>TA {schoolInfo.academicYear || '2026/2027'}</span>
+            <span>•</span>
+            <span className="text-[#5A5A40] dark:text-[#C5C5B0] font-semibold">Pembuat: {schoolInfo.creatorName || 'Waa-O51W'}</span>
+          </div>
+        </div>
+      </footer>
+
+      {/* Fixed Sticky Bottom Navigation for mobile and tablet */}
+      <BottomNav onOpenAuth={() => setIsAuthModalOpen(true)} />
+
+      {/* 🚪 10-Second Class Door Opening & Book Writing Universal Transition */}
+      {isOpeningClass && openingClassData && (
+        <ClassDoorBookTransition
+          classRoom={openingClassData}
+          className={openingClassData.name}
+          classGrade={openingClassData.grade}
+          academicYear={openingClassData.academicYear}
+          onComplete={completeClassTransition}
+          onSkip={cancelClassTransition}
+          onCancel={cancelClassTransition}
+        />
+      )}
+
+      {/* 🚪 10-Second Eskul Door Opening & Book Writing Transition */}
+      {isOpeningEskul && openingEskulData && (
+        <ClassDoorBookTransition
+          eskulItem={openingEskulData}
+          onComplete={completeEskulTransition}
+          onSkip={cancelEskulTransition}
+          onCancel={cancelEskulTransition}
+        />
+      )}
+
+      {/* 🎓 15-Second Joyful Teacher Teaching Transition */}
+      {isOpeningTeacher && (
+        <TeacherTeachingTransition
+          onComplete={completeTeacherTransition}
+          onSkip={cancelTeacherTransition}
+        />
+      )}
+
+      {/* Global Modals & Notifications */}
+      <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
+      <ConfirmModal />
+      <ToastContainer />
+    </div>
+  );
+};
+
+export default function App() {
+  return (
+    <AppProvider>
+      <MainLayout />
+    </AppProvider>
+  );
+}

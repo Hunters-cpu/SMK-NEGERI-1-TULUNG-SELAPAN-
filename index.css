@@ -1,0 +1,336 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  body {
+    background-color: #F5F5F0;
+    color: #2D2D2A;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    overflow-x: hidden;
+    transition: background-color 0.25s ease, color 0.25s ease;
+  }
+
+  html.dark,
+  .dark {
+    color-scheme: dark;
+  }
+
+  html.dark body,
+  .dark body {
+    background-color: #121211 !important;
+    color: #ECECE4 !important;
+  }
+
+  h1, h2, h3, .serif-heading {
+    font-family: 'Playfair Display', Georgia, Cambria, "Times New Roman", Times, serif;
+  }
+}
+
+/* 🌓 GLOBAL DARK MODE COLOR ADAPTATIONS */
+html.dark .bg-white {
+  background-color: #1C1C1A !important;
+  color: #ECECE4;
+}
+html.dark .bg-\[\#F5F5F0\] {
+  background-color: #161614 !important;
+}
+html.dark .bg-\[\#F8F8F5\] {
+  background-color: #22221F !important;
+}
+html.dark .bg-\[\#FAF8F5\] {
+  background-color: #262622 !important;
+}
+html.dark .bg-\[\#F0EFEA\] {
+  background-color: #282824 !important;
+}
+html.dark .border-\[\#E0E0D8\] {
+  border-color: #33332E !important;
+}
+html.dark .border-\[\#D0D0C8\] {
+  border-color: #3E3E38 !important;
+}
+html.dark .border-\[\#ECECE6\] {
+  border-color: #2D2D29 !important;
+}
+html.dark .text-\[\#2D2D2A\] {
+  color: #ECECE4 !important;
+}
+html.dark .text-\[\#8E8E85\] {
+  color: #9C9C92 !important;
+}
+html.dark .text-\[\#5A5A40\] {
+  color: #BDBDA5 !important;
+}
+html.dark input,
+html.dark textarea,
+html.dark select {
+  background-color: #22221F !important;
+  color: #ECECE4 !important;
+  border-color: #383832 !important;
+}
+
+/* Custom theme helper classes for Warm Organic / Cultural */
+.bg-warm-canvas {
+  background-color: #F5F5F0;
+}
+.dark .bg-warm-canvas {
+  background-color: #121211 !important;
+}
+.bg-warm-card {
+  background-color: #FFFFFF;
+}
+.dark .bg-warm-card {
+  background-color: #1C1C1A !important;
+}
+.bg-warm-subcard {
+  background-color: #F8F8F5;
+}
+.dark .bg-warm-subcard {
+  background-color: #22221F !important;
+}
+.bg-cultural-primary {
+  background-color: #5A5A40;
+}
+.text-cultural-primary {
+  color: #5A5A40;
+}
+.border-warm-divider {
+  border-color: #E0E0D8;
+}
+.text-warm-dark {
+  color: #2D2D2A;
+}
+.text-warm-muted {
+  color: #8E8E85;
+}
+
+/* 3D Perspective & Transform Styles */
+.perspective-1000 {
+  perspective: 1000px;
+}
+.perspective-1200 {
+  perspective: 1200px;
+}
+.perspective-2000 {
+  perspective: 2000px;
+}
+.preserve-3d {
+  transform-style: preserve-3d;
+}
+.backface-hidden {
+  backface-visibility: hidden;
+}
+
+/* 🌊 ANIMASI RIAM (Embossed Smooth Floating Paper/Card Lift) */
+.riam-emboss-init {
+  opacity: 0;
+  transform: perspective(1000px) translateY(32px) scale(0.975) rotateX(4deg);
+  transition: transform 0.8s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.8s ease;
+  will-change: transform, opacity;
+}
+
+.riam-emboss-visible {
+  opacity: 1;
+  transform: perspective(1000px) translateY(0) scale(1) rotateX(0deg);
+  box-shadow: 0 16px 36px -12px rgba(45, 45, 42, 0.08), 0 4px 12px -2px rgba(90, 90, 64, 0.04);
+}
+
+.riam-card-hover {
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.riam-card-hover:hover {
+  transform: translateY(-4px) scale(1.01);
+  box-shadow: 0 20px 40px -12px rgba(90, 90, 64, 0.16), 0 8px 16px -4px rgba(0, 0, 0, 0.06);
+}
+
+/* 🌟 UNIVERSAL ANIMATION KEYFRAMES */
+@keyframes fadeInAnim {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleUpAnim {
+  0% {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes floatGentle {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(90, 90, 64, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(90, 90, 64, 0);
+  }
+}
+
+.animate-fadeIn,
+.animate-fade-in {
+  animation: fadeInAnim 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-scaleUp,
+.animate-scale-up {
+  animation: scaleUpAnim 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-float {
+  animation: floatGentle 3s ease-in-out infinite;
+}
+
+/* 🚪 KEYFRAMES PINTU KELAS MEMBUKA (3D DOORS OPENING) */
+@keyframes doorOpenLeftAnim {
+  0% {
+    transform: rotateY(0deg);
+  }
+  20% {
+    transform: rotateY(-5deg);
+  }
+  100% {
+    transform: rotateY(-85deg);
+  }
+}
+
+@keyframes doorOpenRightAnim {
+  0% {
+    transform: rotateY(0deg);
+  }
+  20% {
+    transform: rotateY(5deg);
+  }
+  100% {
+    transform: rotateY(85deg);
+  }
+}
+
+@keyframes doorKnobTurn {
+  0% {
+    transform: rotate(0deg);
+  }
+  40% {
+    transform: rotate(45deg);
+  }
+  80% {
+    transform: rotate(45deg);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+@keyframes roomLightGlow {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.1);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ✍️ KEYFRAMES MENULIS BUKU KENANGAN */
+@keyframes penWritingMotion {
+  0% {
+    transform: translate(0px, 0px) rotate(-25deg);
+  }
+  25% {
+    transform: translate(35px, 8px) rotate(-15deg);
+  }
+  50% {
+    transform: translate(75px, 2px) rotate(-28deg);
+  }
+  75% {
+    transform: translate(120px, 12px) rotate(-18deg);
+  }
+  100% {
+    transform: translate(160px, 5px) rotate(-22deg);
+  }
+}
+
+@keyframes inkGlowPulse {
+  0%, 100% {
+    opacity: 0.4;
+    filter: drop-shadow(0 0 2px rgba(140, 74, 50, 0.3));
+  }
+  50% {
+    opacity: 1;
+    filter: drop-shadow(0 0 8px rgba(140, 74, 50, 0.8));
+  }
+}
+
+@keyframes pageTurnFlutter {
+  0% {
+    transform: rotateY(0deg);
+  }
+  50% {
+    transform: rotateY(-18deg);
+  }
+  100% {
+    transform: rotateY(0deg);
+  }
+}
+
+.anim-door-left {
+  transform-origin: left center;
+  animation: doorOpenLeftAnim 1.4s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+.anim-door-right {
+  transform-origin: right center;
+  animation: doorOpenRightAnim 1.4s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+.anim-knob-turn {
+  animation: doorKnobTurn 0.8s ease-in-out forwards;
+}
+
+.anim-pen-glide {
+  animation: penWritingMotion 1.5s ease-in-out infinite alternate;
+}
+
+.anim-page-flutter {
+  animation: pageTurnFlutter 3s ease-in-out infinite;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #F0F0EA;
+}
+::-webkit-scrollbar-thumb {
+  background: #C4C4B8;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #5A5A40;
+}
+

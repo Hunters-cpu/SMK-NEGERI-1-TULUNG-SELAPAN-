@@ -1,0 +1,418 @@
+import React, { useState } from 'react';
+import { useApp } from '../context/AppContext';
+import { AlumniItem } from '../types';
+import { 
+  GraduationCap, 
+  Search, 
+  Filter, 
+  Briefcase, 
+  Heart, 
+  Plus, 
+  Edit3, 
+  Trash2, 
+  Sparkles, 
+  Quote, 
+  Calendar, 
+  Award,
+  Building,
+  User,
+  X
+} from 'lucide-react';
+import { MediaUploadField } from '../components/MediaUploadField';
+
+export const AlumniView: React.FC = () => {
+  const { 
+    alumniList, 
+    addAlumni, 
+    updateAlumni, 
+    deleteAlumni, 
+    authSession,
+    requestDeleteConfirm,
+    hasAdminScope
+  } = useApp();
+
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [selectedYear, setSelectedYear] = useState<string>('Semua');
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [editingItem, setEditingItem] = useState<AlumniItem | null>(null);
+
+  const [form, setForm] = useState({
+    name: '',
+    graduationYear: new Date().getFullYear() - 1,
+    currentProfession: '',
+    companyOrCampus: '',
+    memoryMessage: '',
+    adviceForJuniors: '',
+    photoUrl: ''
+  });
+
+  const canManage = hasAdminScope('alumni') || authSession.role === 'super_admin';
+
+  // Get distinct graduation years
+  const distinctYears = Array.from(new Set(alumniList.map(a => Number(a.graduationYear)))).sort((a, b) => Number(b) - Number(a));
+
+  // Filtered list
+  const filteredList = alumniList.filter(item => {
+    const prof = item.currentProfession || item.currentOccupation || '';
+    const comp = item.companyOrCampus || item.className || '';
+    const memo = item.memoryMessage || item.quotePesanKesan || '';
+    const matchSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      prof.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      comp.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      memo.toLowerCase().includes(searchQuery.toLowerCase());
+
+    const matchYear = selectedYear === 'Semua' || item.graduationYear.toString() === selectedYear;
+
+    return matchSearch && matchYear;
+  });
+
+  const handleOpenAdd = () => {
+    setEditingItem(null);
+    setForm({
+      name: '',
+      graduationYear: new Date().getFullYear() - 1,
+      currentProfession: '',
+      companyOrCampus: '',
+      memoryMessage: '',
+      adviceForJuniors: '',
+      photoUrl: ''
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEdit = (item: AlumniItem) => {
+    setEditingItem(item);
+    setForm({
+      name: item.name,
+      graduationYear: item.graduationYear,
+      currentProfession: item.currentProfession || item.currentOccupation || '',
+      companyOrCampus: item.companyOrCampus || item.className || '',
+      memoryMessage: item.memoryMessage || item.quotePesanKesan || '',
+      adviceForJuniors: item.adviceForJuniors || item.pesanAlumni || '',
+      photoUrl: item.photoUrl || ''
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.name.trim() || !form.currentProfession.trim()) return;
+
+    if (editingItem) {
+      updateAlumni(editingItem.id, {
+        name: form.name.trim(),
+        graduationYear: Number(form.graduationYear),
+        currentProfession: form.currentProfession.trim(),
+        companyOrCampus: form.companyOrCampus.trim(),
+        memoryMessage: form.memoryMessage.trim(),
+        adviceForJuniors: form.adviceForJuniors.trim() || undefined,
+        photoUrl: form.photoUrl.trim() || undefined
+      });
+    } else {
+      addAlumni({
+        name: form.name.trim(),
+        graduationYear: Number(form.graduationYear),
+        currentProfession: form.currentProfession.trim(),
+        companyOrCampus: form.companyOrCampus.trim(),
+        memoryMessage: form.memoryMessage.trim(),
+        adviceForJuniors: form.adviceForJuniors.trim() || undefined,
+        photoUrl: form.photoUrl.trim() || undefined
+      });
+    }
+
+    setIsModalOpen(false);
+  };
+
+  const handleDelete = (item: AlumniItem) => {
+    requestDeleteConfirm({
+      itemName: `Data Alumni "${item.name}"`,
+      message: `Yakin ingin menghapus jejak alumni ${item.name} (${item.graduationYear})?`,
+      onConfirm: () => deleteAlumni(item.id)
+    });
+  };
+
+  return (
+    <div className="space-y-8 pb-20 animate-fade-in">
+      {/* Header Section */}
+      <div className="relative overflow-hidden bg-gradient-to-br from-[#5A5A40] to-[#3E3E2C] text-white p-6 sm:p-10 rounded-[32px] shadow-lg">
+        <div className="relative z-10 max-w-3xl space-y-3">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1 bg-white/20 backdrop-blur-md rounded-full text-xs font-bold uppercase tracking-widest text-amber-200">
+            <GraduationCap className="w-4 h-4" />
+            <span>Menu 1: Jejak Kenangan & Karir</span>
+          </div>
+          <h1 className="font-serif text-2xl sm:text-4xl font-bold tracking-tight">
+            Alumni & Kisah Lulusan
+          </h1>
+          <p className="text-sm sm:text-base text-white/85 leading-relaxed">
+            Menghubungkan masa lalu dengan masa kini. Menyimpan kenangan manis setiap angkatan, pesan & kesan alumni untuk almamater, serta inspirasi jejak karir bagi adik-adik kelas.
+          </p>
+
+          {canManage && (
+            <div className="pt-2">
+              <button
+                onClick={handleOpenAdd}
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-amber-400 hover:bg-amber-300 text-[#2D2D2A] font-bold rounded-2xl text-xs sm:text-sm shadow-md transition-transform active:scale-95 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Tambah Kisah Alumni</span>
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Filter & Search Bar */}
+      <div className="flex flex-col sm:flex-row items-center gap-4 bg-white dark:bg-[#1E1E1C] p-4 rounded-2xl border border-[#E0E0D8] dark:border-[#383832] shadow-xs">
+        <div className="relative flex-1 w-full">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8E8E85]" />
+          <input
+            type="text"
+            placeholder="Cari nama alumni, profesi, kampus, atau pesan kenangan..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2] focus:outline-none focus:ring-2 focus:ring-[#5A5A40]"
+          />
+        </div>
+
+        <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
+          <Filter className="w-4 h-4 text-[#8E8E85] shrink-0" />
+          <span className="text-xs font-semibold text-[#8E8E85] shrink-0">Angkatan:</span>
+          <select
+            value={selectedYear}
+            onChange={e => setSelectedYear(e.target.value)}
+            className="px-3 py-2 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs font-bold text-[#5A5A40] dark:text-[#EAEAE2] focus:outline-none"
+          >
+            <option value="Semua">Semua Angkatan</option>
+            {distinctYears.map(year => (
+              <option key={year} value={year.toString()}>Angkatan {year}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Alumni Cards Grid */}
+      {filteredList.length === 0 ? (
+        <div className="text-center py-16 bg-white dark:bg-[#1E1E1C] rounded-3xl border border-[#E0E0D8] dark:border-[#383832] p-8">
+          <GraduationCap className="w-12 h-12 text-[#8E8E85] mx-auto mb-3 opacity-40" />
+          <p className="text-base font-bold text-[#2D2D2A] dark:text-[#EAEAE2]">Belum ada data alumni yang cocok</p>
+          <p className="text-xs text-[#8E8E85] mt-1">Coba ubah kata kunci pencarian atau filter tahun angkatan.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredList.map(alumni => (
+            <div
+              key={alumni.id}
+              className="bg-white dark:bg-[#1E1E1C] rounded-[24px] border border-[#E0E0D8] dark:border-[#383832] shadow-sm hover:shadow-md transition-all overflow-hidden flex flex-col justify-between group"
+            >
+              <div>
+                {/* Top Photo & Identity */}
+                <div className="p-5 flex items-start gap-4 border-b border-[#E0E0D8]/60 dark:border-[#383832]/60">
+                  <img
+                    src={alumni.photoUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&auto=format&fit=crop&q=80'}
+                    alt={alumni.name}
+                    className="w-16 h-16 rounded-2xl object-cover ring-2 ring-[#5A5A40]/20 shrink-0"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="px-2 py-0.5 bg-[#5A5A40]/10 dark:bg-[#5A5A40]/30 text-[#5A5A40] dark:text-[#D1D1BE] text-[10px] font-bold rounded-md">
+                        Lulusan {alumni.graduationYear}
+                      </span>
+                    </div>
+                    <h3 className="font-serif text-base font-bold text-[#2D2D2A] dark:text-[#F0F0EA] truncate mt-1">
+                      {alumni.name}
+                    </h3>
+                    <div className="flex items-center gap-1.5 text-xs text-[#8C4A32] dark:text-[#E07A5F] font-semibold mt-0.5 truncate">
+                      <Briefcase className="w-3.5 h-3.5 shrink-0" />
+                      <span>{alumni.currentProfession}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-[11px] text-[#8E8E85] dark:text-[#A4A49B] truncate">
+                      <Building className="w-3 h-3 shrink-0" />
+                      <span>{alumni.companyOrCampus}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Memory & Advice Content */}
+                <div className="p-5 space-y-3">
+                  <div className="bg-[#F8F8F5] dark:bg-[#262622] p-3.5 rounded-xl border border-[#E0E0D8]/60 dark:border-[#383832]/60 relative">
+                    <Quote className="w-4 h-4 text-[#5A5A40]/30 dark:text-[#A4A485]/30 mb-1" />
+                    <p className="text-xs text-[#2D2D2A] dark:text-[#ECECE4] italic leading-relaxed">
+                      "{alumni.memoryMessage}"
+                    </p>
+                  </div>
+
+                  {alumni.adviceForJuniors && (
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-[#5A5A40] dark:text-[#A4A485] flex items-center gap-1">
+                        <Sparkles className="w-3 h-3" />
+                        Pesan untuk Adik Kelas:
+                      </span>
+                      <p className="text-xs text-[#5A5A40] dark:text-[#C5C5B0] leading-relaxed">
+                        {alumni.adviceForJuniors}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Admin Actions Footer */}
+              {canManage && (
+                <div className="p-3 bg-[#F5F5F0] dark:bg-[#282825] border-t border-[#E0E0D8] dark:border-[#383832] flex items-center justify-end gap-2">
+                  <button
+                    onClick={() => handleOpenEdit(alumni)}
+                    className="p-1.5 text-xs text-[#5A5A40] dark:text-[#D1D1BE] hover:bg-[#E0E0D8] dark:hover:bg-[#383832] rounded-lg transition-colors cursor-pointer flex items-center gap-1 font-semibold"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    <span>Edit</span>
+                  </button>
+                  <button
+                    onClick={() => handleDelete(alumni)}
+                    className="p-1.5 text-xs text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-colors cursor-pointer flex items-center gap-1 font-semibold"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Hapus</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add / Edit Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white dark:bg-[#1E1E1C] w-full max-w-lg rounded-[28px] border border-[#E0E0D8] dark:border-[#383832] shadow-2xl overflow-hidden animate-scale-in">
+            <div className="p-5 border-b border-[#E0E0D8] dark:border-[#383832] flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl bg-[#5A5A40] text-white flex items-center justify-center font-bold">
+                  <GraduationCap className="w-5 h-5" />
+                </div>
+                <h3 className="font-serif text-lg font-bold text-[#2D2D2A] dark:text-[#EAEAE2]">
+                  {editingItem ? 'Edit Data Alumni' : 'Tambah Kisah Alumni'}
+                </h3>
+              </div>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="p-2 text-[#8E8E85] hover:text-[#2D2D2A] dark:hover:text-white rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
+              <div>
+                <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">
+                  Nama Lengkap Alumni *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={form.name}
+                  onChange={e => setForm({ ...form, name: e.target.value })}
+                  placeholder="Contoh: Sarah Annisa, S.Kom."
+                  className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">
+                    Tahun Lulus *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min={1980}
+                    max={2035}
+                    value={form.graduationYear}
+                    onChange={e => setForm({ ...form, graduationYear: Number(e.target.value) })}
+                    className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">
+                    Profesi Saat Ini *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={form.currentProfession}
+                    onChange={e => setForm({ ...form, currentProfession: e.target.value })}
+                    placeholder="Contoh: Dokter Umum / Software Engineer"
+                    className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">
+                  Perusahaan / Instansi / Kampus *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={form.companyOrCampus}
+                  onChange={e => setForm({ ...form, companyOrCampus: e.target.value })}
+                  placeholder="Contoh: RSUD Provinsi / Universitas Indonesia"
+                  className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+                />
+              </div>
+
+              <MediaUploadField
+                label="Foto Profil Alumni (URL / Upload)"
+                value={form.photoUrl}
+                onChange={url => setForm({ ...form, photoUrl: url })}
+                placeholder="https://..."
+              />
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">
+                  Pesan & Kesan untuk Sekolah *
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  value={form.memoryMessage}
+                  onChange={e => setForm({ ...form, memoryMessage: e.target.value })}
+                  placeholder="Ceritakan kenangan paling berkesan saat bersekolah di sini..."
+                  className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">
+                  Pesan / Saran untuk Adik-Adik Kelas (Opsional)
+                </label>
+                <textarea
+                  rows={2}
+                  value={form.adviceForJuniors}
+                  onChange={e => setForm({ ...form, adviceForJuniors: e.target.value })}
+                  placeholder="Nasihat, motivasi, atau tips menghadapi dunia kuliah/kerja..."
+                  className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2.5 text-xs font-bold text-[#8E8E85] hover:bg-[#F5F5F0] dark:hover:bg-[#282825] rounded-xl cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 bg-[#5A5A40] hover:bg-[#484833] text-white text-xs font-bold rounded-xl shadow-md cursor-pointer"
+                >
+                  {editingItem ? 'Simpan Perubahan' : 'Tambah Alumni'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

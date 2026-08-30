@@ -1,0 +1,438 @@
+import React, { useState, useMemo } from 'react';
+import { useApp } from '../context/AppContext';
+import { generateSchoolPortalHtml, getWebsiteIndexHtml } from '../utils/htmlExport';
+import {
+  FileCode,
+  Download,
+  Copy,
+  Check,
+  ExternalLink,
+  Eye,
+  Code,
+  Sparkles,
+  Layers,
+  Users,
+  GraduationCap,
+  Calendar,
+  Megaphone,
+  CheckCircle2,
+  Share2,
+  HardDrive,
+  Globe,
+  ArrowLeft
+} from 'lucide-react';
+
+export const HtmlExportView: React.FC = () => {
+  const {
+    schoolInfo,
+    classes,
+    students,
+    teachers,
+    announcements,
+    eskulList,
+    calendarEvents,
+    facilities,
+    showToast,
+    setCurrentView
+  } = useApp();
+
+  const [activeTab, setActiveTab] = useState<'portal' | 'index'>('portal');
+  const [activeSubView, setActiveSubView] = useState<'overview' | 'preview' | 'code'>('overview');
+  const [copied, setCopied] = useState(false);
+
+  // Generate HTML strings
+  const portalHtml = useMemo(() => {
+    return generateSchoolPortalHtml({
+      schoolInfo,
+      classes,
+      students,
+      teachers,
+      announcements,
+      eskulList,
+      calendarEvents,
+      facilities
+    });
+  }, [schoolInfo, classes, students, teachers, announcements, eskulList, calendarEvents, facilities]);
+
+  const indexHtml = useMemo(() => {
+    return getWebsiteIndexHtml(schoolInfo);
+  }, [schoolInfo]);
+
+  const currentHtml = activeTab === 'portal' ? portalHtml : indexHtml;
+  const currentFilename = activeTab === 'portal'
+    ? `${schoolInfo.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}-website-portal.html`
+    : 'index.html';
+
+  const handleDownload = () => {
+    const blob = new Blob([currentHtml], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = currentFilename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    showToast(`Berkas "${currentFilename}" berhasil diunduh!`, 'success');
+  };
+
+  const handleCopyCode = async () => {
+    try {
+      await navigator.clipboard.writeText(currentHtml);
+      setCopied(true);
+      showToast('Seluruh kode HTML berhasil disalin ke clipboard!', 'success');
+      setTimeout(() => setCopied(false), 3000);
+    } catch {
+      showToast('Gagal menyalin kode HTML.', 'error');
+    }
+  };
+
+  const handleOpenInNewTab = () => {
+    const blob = new Blob([currentHtml], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+  };
+
+  const fileSizeKb = (new Blob([currentHtml]).size / 1024).toFixed(1);
+
+  return (
+    <div className="max-w-6xl mx-auto px-4 py-6 sm:py-8 space-y-6 animate-fade-in text-[#2D2D2A] dark:text-[#EAEAE2]">
+      
+      {/* Top Header Breadcrumb */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#E0E0D8] dark:border-[#383832] pb-6">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setCurrentView('home')}
+            className="p-2.5 rounded-2xl border border-[#E0E0D8] dark:border-[#383832] bg-white dark:bg-[#282825] hover:bg-[#F5F5F0] dark:hover:bg-[#33332D] text-[#5A5A40] dark:text-[#C5C5B0] transition-all cursor-pointer shadow-xs"
+            title="Kembali ke Beranda"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="font-serif text-2xl sm:text-3xl font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">
+                Ekspor Website Menjadi File HTML
+              </h1>
+              <span className="px-2.5 py-0.5 text-xs font-bold bg-[#5A5A40]/10 dark:bg-[#5A5A40]/30 text-[#5A5A40] dark:text-[#C5C5B0] rounded-full border border-[#5A5A40]/20">
+                Luring / Offline Ready
+              </span>
+            </div>
+            <p className="text-xs sm:text-sm text-[#7A7A70] dark:text-[#A4A496] mt-1">
+              Konversi seluruh data dan tampilan portal sekolah menjadi berkas tunggal <code>.html</code> yang siap dibuka tanpa internet.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleCopyCode}
+            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-[#E0E0D8] dark:border-[#383832] bg-white dark:bg-[#282825] hover:bg-[#F5F5F0] dark:hover:bg-[#33332D] text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95"
+          >
+            {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4 text-[#5A5A40] dark:text-[#C5C5B0]" />}
+            <span>{copied ? 'Tersalin!' : 'Salin Kode'}</span>
+          </button>
+
+          <button
+            onClick={handleOpenInNewTab}
+            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-[#E0E0D8] dark:border-[#383832] bg-white dark:bg-[#282825] hover:bg-[#F5F5F0] dark:hover:bg-[#33332D] text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95"
+          >
+            <ExternalLink className="w-4 h-4 text-[#5A5A40] dark:text-[#C5C5B0]" />
+            <span>Buka Tab Baru</span>
+          </button>
+
+          <button
+            onClick={handleDownload}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#5A5A40] hover:bg-[#484833] text-white text-xs sm:text-sm font-bold shadow-md transition-all cursor-pointer active:scale-95"
+          >
+            <Download className="w-4 h-4" />
+            <span>Unduh .HTML</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Target File Type Selection */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Option 1: Standalone Portal */}
+        <div
+          onClick={() => setActiveTab('portal')}
+          className={`p-5 rounded-3xl border transition-all cursor-pointer flex flex-col justify-between ${
+            activeTab === 'portal'
+              ? 'border-[#5A5A40] bg-[#5A5A40]/5 dark:bg-[#5A5A40]/15 ring-2 ring-[#5A5A40]/30 shadow-md'
+              : 'border-[#E0E0D8] dark:border-[#383832] bg-white dark:bg-[#252522] hover:border-[#5A5A40]/50'
+          }`}
+        >
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-[#5A5A40] text-white shadow-xs">
+                  <FileCode className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-[#2D2D2A] dark:text-[#F0F0EA]">
+                    Website Portal Lengkap (.html)
+                  </h3>
+                  <span className="text-[11px] text-[#7A7A70] dark:text-[#A4A496]">
+                    Single File • Standalone • All-in-One
+                  </span>
+                </div>
+              </div>
+              {activeTab === 'portal' && (
+                <CheckCircle2 className="w-5 h-5 text-[#5A5A40] dark:text-[#C5C5B0]" />
+              )}
+            </div>
+            <p className="text-xs text-[#7A7A70] dark:text-[#A4A496] leading-relaxed pt-2">
+              Menghasilkan satu berkas HTML lengkap berisi navigasi tab, gaya CSS modern, data dinamis (visi-misi, kelas, siswa, guru, agenda, pengumuman), fitur pencarian instan, dan tombol mode gelap.
+            </p>
+          </div>
+
+          <div className="mt-4 pt-3 border-t border-[#E0E0D8] dark:border-[#383832] flex items-center justify-between text-xs">
+            <span className="font-bold text-[#5A5A40] dark:text-[#C5C5B0]">
+              Ukuran: ~{fileSizeKb} KB
+            </span>
+            <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 font-bold text-[10px]">
+              Offline Ready
+            </span>
+          </div>
+        </div>
+
+        {/* Option 2: index.html Template */}
+        <div
+          onClick={() => setActiveTab('index')}
+          className={`p-5 rounded-3xl border transition-all cursor-pointer flex flex-col justify-between ${
+            activeTab === 'index'
+              ? 'border-[#5A5A40] bg-[#5A5A40]/5 dark:bg-[#5A5A40]/15 ring-2 ring-[#5A5A40]/30 shadow-md'
+              : 'border-[#E0E0D8] dark:border-[#383832] bg-white dark:bg-[#252522] hover:border-[#5A5A40]/50'
+          }`}
+        >
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-purple-600 text-white shadow-xs">
+                  <Globe className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-[#2D2D2A] dark:text-[#F0F0EA]">
+                    Berkas index.html (Source Entry)
+                  </h3>
+                  <span className="text-[11px] text-[#7A7A70] dark:text-[#A4A496]">
+                    Template Web Standar & Hosting
+                  </span>
+                </div>
+              </div>
+              {activeTab === 'index' && (
+                <CheckCircle2 className="w-5 h-5 text-[#5A5A40] dark:text-[#C5C5B0]" />
+              )}
+            </div>
+            <p className="text-xs text-[#7A7A70] dark:text-[#A4A496] leading-relaxed pt-2">
+              Berkas <code>index.html</code> standar untuk root server, memuat integrasi meta tags SEO sekolah, link favicon, Open Graph, Google Fonts, dan mount container aplikasi.
+            </p>
+          </div>
+
+          <div className="mt-4 pt-3 border-t border-[#E0E0D8] dark:border-[#383832] flex items-center justify-between text-xs">
+            <span className="font-bold text-purple-600 dark:text-purple-400">
+              Format: Standard HTML5
+            </span>
+            <span className="px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-700 dark:text-purple-300 font-bold text-[10px]">
+              Web Server & Build
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Export Data Summary Stats */}
+      {activeTab === 'portal' && (
+        <div className="p-5 rounded-3xl bg-[#F5F5F0] dark:bg-[#252522] border border-[#E0E0D8] dark:border-[#383832] space-y-3">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-[#5A5A40] dark:text-[#C5C5B0]" />
+            <h3 className="font-bold text-xs uppercase tracking-wider text-[#5A5A40] dark:text-[#C5C5B0]">
+              Data Yang Dikemas Dalam Berkas HTML Ini:
+            </h3>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+            <div className="p-3 bg-white dark:bg-[#1E1E1C] rounded-2xl border border-[#E0E0D8] dark:border-[#383832] text-center">
+              <Layers className="w-4 h-4 mx-auto text-[#5A5A40] dark:text-[#C5C5B0] mb-1" />
+              <div className="text-lg font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">{classes.length}</div>
+              <div className="text-[10px] text-[#7A7A70] dark:text-[#A4A496]">Rombel Kelas</div>
+            </div>
+
+            <div className="p-3 bg-white dark:bg-[#1E1E1C] rounded-2xl border border-[#E0E0D8] dark:border-[#383832] text-center">
+              <Users className="w-4 h-4 mx-auto text-[#5A5A40] dark:text-[#C5C5B0] mb-1" />
+              <div className="text-lg font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">{students.length}</div>
+              <div className="text-[10px] text-[#7A7A70] dark:text-[#A4A496]">Data Siswa</div>
+            </div>
+
+            <div className="p-3 bg-white dark:bg-[#1E1E1C] rounded-2xl border border-[#E0E0D8] dark:border-[#383832] text-center">
+              <GraduationCap className="w-4 h-4 mx-auto text-[#5A5A40] dark:text-[#C5C5B0] mb-1" />
+              <div className="text-lg font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">{teachers.length}</div>
+              <div className="text-[10px] text-[#7A7A70] dark:text-[#A4A496]">Guru & Staf</div>
+            </div>
+
+            <div className="p-3 bg-white dark:bg-[#1E1E1C] rounded-2xl border border-[#E0E0D8] dark:border-[#383832] text-center">
+              <Calendar className="w-4 h-4 mx-auto text-[#5A5A40] dark:text-[#C5C5B0] mb-1" />
+              <div className="text-lg font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">{calendarEvents.length}</div>
+              <div className="text-[10px] text-[#7A7A70] dark:text-[#A4A496]">Agenda Kalender</div>
+            </div>
+
+            <div className="p-3 bg-white dark:bg-[#1E1E1C] rounded-2xl border border-[#E0E0D8] dark:border-[#383832] text-center">
+              <Megaphone className="w-4 h-4 mx-auto text-[#5A5A40] dark:text-[#C5C5B0] mb-1" />
+              <div className="text-lg font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">{announcements.length}</div>
+              <div className="text-[10px] text-[#7A7A70] dark:text-[#A4A496]">Pengumuman</div>
+            </div>
+
+            <div className="p-3 bg-white dark:bg-[#1E1E1C] rounded-2xl border border-[#E0E0D8] dark:border-[#383832] text-center">
+              <Share2 className="w-4 h-4 mx-auto text-[#5A5A40] dark:text-[#C5C5B0] mb-1" />
+              <div className="text-lg font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">{eskulList.length}</div>
+              <div className="text-[10px] text-[#7A7A70] dark:text-[#A4A496]">Ekstrakurikuler</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Subview Selector: Overview / Live Frame Preview / Code Inspector */}
+      <div className="bg-white dark:bg-[#252522] rounded-3xl border border-[#E0E0D8] dark:border-[#383832] overflow-hidden shadow-sm">
+        
+        {/* Navigation Tabs */}
+        <div className="px-6 py-3 border-b border-[#E0E0D8] dark:border-[#383832] bg-[#FBFBFA] dark:bg-[#282825] flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setActiveSubView('overview')}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeSubView === 'overview'
+                  ? 'bg-[#5A5A40] text-white shadow-xs'
+                  : 'text-[#7A7A70] dark:text-[#A4A496] hover:bg-[#EAEAE5] dark:hover:bg-[#33332D]'
+              }`}
+            >
+              <HardDrive className="w-3.5 h-3.5" />
+              <span>Petunjuk & Cara Pakai</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveSubView('preview')}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeSubView === 'preview'
+                  ? 'bg-[#5A5A40] text-white shadow-xs'
+                  : 'text-[#7A7A70] dark:text-[#A4A496] hover:bg-[#EAEAE5] dark:hover:bg-[#33332D]'
+              }`}
+            >
+              <Eye className="w-3.5 h-3.5" />
+              <span>Pratinjau Langsung (Live Preview)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveSubView('code')}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeSubView === 'code'
+                  ? 'bg-[#5A5A40] text-white shadow-xs'
+                  : 'text-[#7A7A70] dark:text-[#A4A496] hover:bg-[#EAEAE5] dark:hover:bg-[#33332D]'
+              }`}
+            >
+              <Code className="w-3.5 h-3.5" />
+              <span>Inspektur Kode HTML</span>
+            </button>
+          </div>
+
+          <div className="text-xs text-[#7A7A70] dark:text-[#A4A496] font-mono">
+            {currentFilename}
+          </div>
+        </div>
+
+        {/* Tab 1: Overview & Usage Instructions */}
+        {activeSubView === 'overview' && (
+          <div className="p-6 space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              
+              <div className="p-5 rounded-2xl bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#383832] space-y-2">
+                <div className="w-8 h-8 rounded-xl bg-[#5A5A40] text-white flex items-center justify-center font-bold text-sm">
+                  1
+                </div>
+                <h4 className="font-bold text-sm text-[#2D2D2A] dark:text-[#F0F0EA]">
+                  Unduh Berkas .HTML
+                </h4>
+                <p className="text-xs text-[#7A7A70] dark:text-[#A4A496] leading-relaxed">
+                  Klik tombol <strong>"Unduh .HTML"</strong> di bagian atas. Berkas akan langsung tersimpan di folder Unduhan / Download perangkat Anda.
+                </p>
+              </div>
+
+              <div className="p-5 rounded-2xl bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#383832] space-y-2">
+                <div className="w-8 h-8 rounded-xl bg-[#5A5A40] text-white flex items-center justify-center font-bold text-sm">
+                  2
+                </div>
+                <h4 className="font-bold text-sm text-[#2D2D2A] dark:text-[#F0F0EA]">
+                  Buka di Browser Manapun
+                </h4>
+                <p className="text-xs text-[#7A7A70] dark:text-[#A4A496] leading-relaxed">
+                  Cukup klik ganda (double-click) berkas HTML tersebut. Dapat dibuka di Google Chrome, Mozilla Firefox, Microsoft Edge, Safari di HP maupun Komputer tanpa internet.
+                </p>
+              </div>
+
+              <div className="p-5 rounded-2xl bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#383832] space-y-2">
+                <div className="w-8 h-8 rounded-xl bg-[#5A5A40] text-white flex items-center justify-center font-bold text-sm">
+                  3
+                </div>
+                <h4 className="font-bold text-sm text-[#2D2D2A] dark:text-[#F0F0EA]">
+                  Bagikan & Hosting Bebas
+                </h4>
+                <p className="text-xs text-[#7A7A70] dark:text-[#A4A496] leading-relaxed">
+                  Berkas ini dapat langsung diunggah ke hosting gratis seperti GitHub Pages, Netlify, Cloudflare Pages, cPanel, atau dibagikan melalui WhatsApp & Flashdisk.
+                </p>
+              </div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 flex items-start gap-3">
+              <Sparkles className="w-5 h-5 text-amber-700 dark:text-amber-300 shrink-0 mt-0.5" />
+              <div className="text-xs space-y-1 text-amber-900 dark:text-amber-200">
+                <p className="font-bold">Keistimewaan Format HTML Standalone Ini:</p>
+                <p className="leading-relaxed">
+                  Tidak memerlukan instalasi server Apache / Node.js tambahan, tidak memerlukan koneksi basis data online, dan sudah dilengkapi sistem pencarian siswa & guru berbasis Javascript lokal berkecepatan tinggi!
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tab 2: Live Embedded Preview */}
+        {activeSubView === 'preview' && (
+          <div className="p-4">
+            <div className="rounded-2xl border border-[#E0E0D8] dark:border-[#383832] overflow-hidden bg-white h-[600px]">
+              <iframe
+                title="Preview Website HTML"
+                srcDoc={currentHtml}
+                className="w-full h-full border-0"
+                sandbox="allow-scripts allow-same-origin"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Tab 3: Code Inspector */}
+        {activeSubView === 'code' && (
+          <div className="p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-[#7A7A70] dark:text-[#A4A496]">
+                Menampilkan seluruh isi struktur berkas HTML ({currentHtml.split('\n').length} baris kode)
+              </span>
+              <button
+                onClick={handleCopyCode}
+                className="inline-flex items-center gap-1 text-xs font-bold text-[#5A5A40] dark:text-[#C5C5B0] hover:underline cursor-pointer"
+              >
+                {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copied ? 'Tersalin' : 'Salin Semua'}</span>
+              </button>
+            </div>
+
+            <pre className="p-4 bg-[#181816] text-[#D1D1BE] text-xs font-mono rounded-2xl overflow-x-auto max-h-[500px] border border-[#383832] leading-relaxed">
+              <code>{currentHtml}</code>
+            </pre>
+          </div>
+        )}
+
+      </div>
+
+    </div>
+  );
+};

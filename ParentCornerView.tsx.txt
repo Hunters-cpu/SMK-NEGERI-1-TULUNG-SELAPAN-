@@ -1,0 +1,330 @@
+import React, { useState } from 'react';
+import { useApp } from '../context/AppContext';
+import { ParentingArticle } from '../types';
+import { 
+  Heart, 
+  BookOpen, 
+  Plus, 
+  Edit3, 
+  Trash2, 
+  Sparkles, 
+  Share2, 
+  User, 
+  Calendar, 
+  Search, 
+  MessageCircle,
+  X
+} from 'lucide-react';
+import { MediaUploadField } from '../components/MediaUploadField';
+
+export const ParentCornerView: React.FC = () => {
+  const { 
+    parentingArticles, 
+    addParentingArticle, 
+    updateParentingArticle, 
+    deleteParentingArticle, 
+    authSession,
+    requestDeleteConfirm,
+    hasAdminScope
+  } = useApp();
+
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [selectedCat, setSelectedCat] = useState<string>('Semua');
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [editingItem, setEditingItem] = useState<ParentingArticle | null>(null);
+
+  const [form, setForm] = useState({
+    title: '',
+    author: 'Tim BK & Psikolog Sekolah',
+    category: 'Edukasi Karakter' as ParentingArticle['category'],
+    summary: '',
+    content: '',
+    imageUrl: ''
+  });
+
+  const canManage = hasAdminScope('parenting') || authSession.role === 'super_admin';
+
+  const filteredArticles = (parentingArticles || []).filter(art => {
+    const matchSearch = art.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      art.summary.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchCat = selectedCat === 'Semua' || art.category === selectedCat;
+    return matchSearch && matchCat;
+  });
+
+  const handleOpenAdd = () => {
+    setEditingItem(null);
+    setForm({
+      title: '',
+      author: 'Tim BK & Psikolog Sekolah',
+      category: 'Edukasi Karakter',
+      summary: '',
+      content: '',
+      imageUrl: ''
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEdit = (item: ParentingArticle) => {
+    setEditingItem(item);
+    setForm({
+      title: item.title,
+      author: item.author,
+      category: item.category,
+      summary: item.summary,
+      content: item.content,
+      imageUrl: item.imageUrl || ''
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.title.trim() || !form.content.trim()) return;
+
+    if (editingItem) {
+      updateParentingArticle(editingItem.id, {
+        title: form.title.trim(),
+        author: form.author.trim(),
+        category: form.category,
+        summary: form.summary.trim() || form.content.slice(0, 100) + '...',
+        content: form.content.trim(),
+        imageUrl: form.imageUrl.trim() || undefined
+      });
+    } else {
+      addParentingArticle({
+        title: form.title.trim(),
+        author: form.author.trim(),
+        category: form.category,
+        summary: form.summary.trim() || form.content.slice(0, 100) + '...',
+        content: form.content.trim(),
+        imageUrl: form.imageUrl.trim() || undefined
+      });
+    }
+
+    setIsModalOpen(false);
+  };
+
+  const handleDelete = (item: ParentingArticle) => {
+    requestDeleteConfirm({
+      itemName: `Artikel "${item.title}"`,
+      message: `Hapus artikel parenting "${item.title}"?`,
+      onConfirm: () => deleteParentingArticle(item.id)
+    });
+  };
+
+  return (
+    <div className="space-y-8 pb-20 animate-fade-in">
+      {/* Header Banner */}
+      <div className="relative overflow-hidden bg-gradient-to-br from-[#5A5A40] via-[#3E3E2C] to-[#2B2B1E] text-white p-6 sm:p-10 rounded-[32px] shadow-lg">
+        <div className="relative z-10 max-w-3xl space-y-3">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1 bg-white/20 backdrop-blur-md rounded-full text-xs font-bold uppercase tracking-widest text-amber-200">
+            <Heart className="w-4 h-4" />
+            <span>Menu 19: Pojok Edukasi & Sinergi Wali Murid</span>
+          </div>
+          <h1 className="font-serif text-2xl sm:text-4xl font-bold tracking-tight">
+            Pojok Parenting & Edukasi Orang Tua
+          </h1>
+          <p className="text-sm sm:text-base text-white/85 leading-relaxed">
+            Artikel psikologi anak & remaja, tips mendampingi belajar di rumah, komunikasi efektif keluarga, manajemen kecanduan gadget, serta jadwal seminar parenting sekolah.
+          </p>
+
+          {canManage && (
+            <div className="pt-2">
+              <button
+                onClick={handleOpenAdd}
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-amber-400 hover:bg-amber-300 text-[#2D2D2A] font-bold rounded-2xl text-xs sm:text-sm shadow-md transition-transform active:scale-95 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Tulis Artikel Parenting</span>
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Filter & Search Bar */}
+      <div className="flex flex-col sm:flex-row items-center gap-4 bg-white dark:bg-[#1E1E1C] p-4 rounded-2xl border border-[#E0E0D8] dark:border-[#383832] shadow-xs">
+        <div className="relative flex-1 w-full">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8E8E85]" />
+          <input
+            type="text"
+            placeholder="Cari topik parenting, tips belajar, komunikasi anak..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2] focus:outline-none focus:ring-2 focus:ring-[#5A5A40]"
+          />
+        </div>
+
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 w-full sm:w-auto">
+          {['Semua', 'Edukasi Karakter', 'Psikologi Anak', 'Kesehatan Remaja', 'Tips Belajar'].map(cat => (
+            <button
+              key={cat}
+              onClick={() => setSelectedCat(cat)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
+                selectedCat === cat
+                  ? 'bg-[#5A5A40] text-white shadow-xs'
+                  : 'bg-[#F5F5F0] dark:bg-[#282825] text-[#8E8E85] hover:text-[#2D2D2A] dark:hover:text-white'
+              }`}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Articles Grid */}
+      {filteredArticles.length === 0 ? (
+        <div className="text-center py-16 bg-white dark:bg-[#1E1E1C] rounded-3xl border border-[#E0E0D8] dark:border-[#383832] p-8">
+          <BookOpen className="w-12 h-12 text-[#8E8E85] mx-auto mb-3 opacity-40" />
+          <p className="text-base font-bold text-[#2D2D2A] dark:text-[#EAEAE2]">Belum ada artikel yang cocok</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredArticles.map(art => (
+            <div
+              key={art.id}
+              className="bg-white dark:bg-[#1E1E1C] rounded-[28px] border border-[#E0E0D8] dark:border-[#383832] shadow-sm overflow-hidden flex flex-col justify-between"
+            >
+              <div>
+                <div className="relative aspect-[16/10] w-full overflow-hidden bg-neutral-100 dark:bg-neutral-800">
+                  <img
+                    src={art.imageUrl || 'https://images.unsplash.com/photo-1491438590914-bc09fcaaf77a?w=500&auto=format&fit=crop&q=80'}
+                    alt={art.title}
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute top-3 left-3 px-3 py-1 bg-black/60 backdrop-blur-xs text-white text-[10px] font-bold rounded-full">
+                    {art.category}
+                  </div>
+                </div>
+
+                <div className="p-6 space-y-3">
+                  <div className="flex items-center gap-2 text-xs text-[#8E8E85]">
+                    <span>{art.publishedDate}</span>
+                    <span>•</span>
+                    <span className="text-[#8C4A32] dark:text-[#E07A5F] font-semibold">{art.author}</span>
+                  </div>
+
+                  <h3 className="font-serif text-lg font-bold text-[#2D2D2A] dark:text-[#F0F0EA] leading-snug">
+                    {art.title}
+                  </h3>
+
+                  <p className="text-xs sm:text-sm text-[#5A5A40] dark:text-[#C5C5B0] leading-relaxed line-clamp-3">
+                    {art.summary}
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-4 bg-[#F8F8F5] dark:bg-[#282825] border-t border-[#E0E0D8]/60 dark:border-[#383832]/60 flex items-center justify-between">
+                <span className="text-xs font-bold text-[#5A5A40] dark:text-[#A4A485]">
+                  Baca Selengkapnya →
+                </span>
+
+                {canManage && (
+                  <div className="flex items-center gap-3 text-xs font-semibold">
+                    <button onClick={() => handleOpenEdit(art)} className="text-[#5A5A40] dark:text-[#D1D1BE] hover:underline cursor-pointer">
+                      Edit
+                    </button>
+                    <span>•</span>
+                    <button onClick={() => handleDelete(art)} className="text-rose-600 hover:underline cursor-pointer">
+                      Hapus
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white dark:bg-[#1E1E1C] w-full max-w-lg rounded-[28px] border border-[#E0E0D8] dark:border-[#383832] shadow-2xl overflow-hidden animate-scale-in">
+            <div className="p-5 border-b border-[#E0E0D8] dark:border-[#383832] flex items-center justify-between">
+              <h3 className="font-serif text-lg font-bold text-[#2D2D2A] dark:text-[#EAEAE2]">
+                {editingItem ? 'Edit Artikel Parenting' : 'Tulis Artikel Parenting Baru'}
+              </h3>
+              <button onClick={() => setIsModalOpen(false)} className="p-2 text-[#8E8E85] cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleSubmit} className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
+              <div>
+                <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">Judul Artikel *</label>
+                <input
+                  type="text"
+                  required
+                  value={form.title}
+                  onChange={e => setForm({ ...form, title: e.target.value })}
+                  placeholder="Contoh: 5 Kiat Membangun Komunikasi Hangat dengan Remaja"
+                  className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">Penulis / Sumber *</label>
+                  <input
+                    type="text"
+                    required
+                    value={form.author}
+                    onChange={e => setForm({ ...form, author: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">Kategori *</label>
+                  <select
+                    value={form.category}
+                    onChange={e => setForm({ ...form, category: e.target.value as any })}
+                    className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs font-bold text-[#2D2D2A] dark:text-[#EAEAE2]"
+                  >
+                    <option value="Edukasi Karakter">Edukasi Karakter</option>
+                    <option value="Psikologi Anak">Psikologi Anak</option>
+                    <option value="Kesehatan Remaja">Kesehatan Remaja</option>
+                    <option value="Tips Belajar">Tips Belajar</option>
+                  </select>
+                </div>
+              </div>
+
+              <MediaUploadField
+                label="Foto Sampul Artikel (URL / Upload)"
+                value={form.imageUrl}
+                onChange={url => setForm({ ...form, imageUrl: url })}
+                placeholder="https://..."
+              />
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">Ringkasan Singkat</label>
+                <textarea
+                  rows={2}
+                  value={form.summary}
+                  onChange={e => setForm({ ...form, summary: e.target.value })}
+                  placeholder="Ringkasan 1-2 kalimat..."
+                  className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase text-[#5A5A40] dark:text-[#A4A485] mb-1">Isi Lengkap Artikel *</label>
+                <textarea
+                  required
+                  rows={6}
+                  value={form.content}
+                  onChange={e => setForm({ ...form, content: e.target.value })}
+                  placeholder="Tuliskan isi artikel dan panduan lengkap untuk orang tua..."
+                  className="w-full px-3.5 py-2.5 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs sm:text-sm text-[#2D2D2A] dark:text-[#EAEAE2]"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-xs font-bold text-[#8E8E85]">Batal</button>
+                <button type="submit" className="px-5 py-2 bg-[#5A5A40] text-white text-xs font-bold rounded-xl">Simpan Artikel</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

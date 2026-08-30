@@ -1,0 +1,126 @@
+import React from 'react';
+import { AlertTriangle, Trash2, Send, X, Check } from 'lucide-react';
+
+interface WorkspaceConfirmModalProps {
+  isOpen: boolean;
+  title: string;
+  description: string;
+  affectedCount?: number;
+  affectedItems?: string[];
+  actionType?: 'delete' | 'send' | 'sync' | 'update';
+  confirmLabel?: string;
+  cancelLabel?: string;
+  isLoading?: boolean;
+  onConfirm: () => void;
+  onClose: () => void;
+}
+
+export const WorkspaceConfirmModal: React.FC<WorkspaceConfirmModalProps> = ({
+  isOpen,
+  title,
+  description,
+  affectedCount,
+  affectedItems,
+  actionType = 'delete',
+  confirmLabel,
+  cancelLabel = 'Batal',
+  isLoading = false,
+  onConfirm,
+  onClose
+}) => {
+  if (!isOpen) return null;
+
+  const isDelete = actionType === 'delete';
+  const isSend = actionType === 'send';
+
+  let defaultConfirm = 'Konfirmasi & Lanjutkan';
+  if (isDelete) defaultConfirm = 'Hapus Permanen';
+  if (isSend) defaultConfirm = 'Kirim Sekarang';
+  if (actionType === 'sync') defaultConfirm = 'Sinkronkan Sekarang';
+
+  const confirmText = confirmLabel || defaultConfirm;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+      <div className="bg-white dark:bg-[#1E1E1C] rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-[#E0E0D8] dark:border-[#383832] space-y-5 animate-scale-up">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+              isDelete 
+                ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400' 
+                : isSend 
+                ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400'
+                : 'bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400'
+            }`}>
+              {isDelete ? <Trash2 className="w-5 h-5" /> : isSend ? <Send className="w-5 h-5" /> : <AlertTriangle className="w-5 h-5" />}
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">{title}</h3>
+              <p className="text-xs text-[#8E8E85] dark:text-[#A4A49B]">Google Workspace Operasi Konfirmasi</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            disabled={isLoading}
+            className="p-1 rounded-lg text-[#8E8E85] hover:bg-[#F5F5F0] dark:hover:bg-[#282825] cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="text-sm text-[#555] dark:text-[#CCC] leading-relaxed">
+          {description}
+        </div>
+
+        {affectedCount !== undefined && affectedCount > 0 && (
+          <div className="p-3 bg-[#F5F5F0] dark:bg-[#282825] border border-[#E0E0D8] dark:border-[#42423B] rounded-xl text-xs space-y-1.5">
+            <div className="font-semibold text-[#2D2D2A] dark:text-[#EAEAE2]">
+              Jumlah data terpengaruh: <span className="text-[#5A5A40] dark:text-[#A4A485] font-bold">{affectedCount} item</span>
+            </div>
+            {affectedItems && affectedItems.length > 0 && (
+              <ul className="list-disc pl-4 space-y-1 text-[#666] dark:text-[#AAA] max-h-28 overflow-y-auto">
+                {affectedItems.map((item, idx) => (
+                  <li key={idx} className="line-clamp-1">{item}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
+        <div className="flex items-center justify-end gap-3 pt-2">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isLoading}
+            className="px-4 py-2.5 rounded-xl text-xs font-semibold bg-[#F5F5F0] dark:bg-[#282825] hover:bg-[#EAEAE5] dark:hover:bg-[#33332D] text-[#2D2D2A] dark:text-[#EAEAE2] border border-[#E0E0D8] dark:border-[#42423B] transition-colors cursor-pointer"
+          >
+            {cancelLabel}
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={isLoading}
+            className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold text-white transition-all cursor-pointer shadow-sm active:scale-95 disabled:opacity-50 ${
+              isDelete
+                ? 'bg-rose-600 hover:bg-rose-700'
+                : isSend
+                ? 'bg-emerald-600 hover:bg-emerald-700'
+                : 'bg-[#5A5A40] hover:bg-[#484833]'
+            }`}
+          >
+            {isLoading ? (
+              <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            ) : isDelete ? (
+              <Trash2 className="w-3.5 h-3.5" />
+            ) : isSend ? (
+              <Send className="w-3.5 h-3.5" />
+            ) : (
+              <Check className="w-3.5 h-3.5" />
+            )}
+            <span>{isLoading ? 'Memproses...' : confirmText}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};

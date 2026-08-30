@@ -1,0 +1,563 @@
+import React, { useState } from 'react';
+import { useApp } from '../context/AppContext';
+import { 
+  getCalendarGrid, 
+  MONTH_NAMES_ID, 
+  DAY_NAMES_ID, 
+  FULL_DAY_NAMES_ID, 
+  CalendarDayInfo 
+} from '../utils/indonesianCalendar';
+import { 
+  Calendar as CalendarIcon, 
+  ChevronLeft, 
+  ChevronRight, 
+  ChevronDown, 
+  ChevronUp, 
+  Sparkles, 
+  Clock, 
+  Info, 
+  BookOpen, 
+  Coffee, 
+  ExternalLink,
+  Plus,
+  X
+} from 'lucide-react';
+
+export const BerandaCalendarWidget: React.FC = () => {
+  const { 
+    calendarEvents, 
+    setCurrentView,
+    authSession,
+    addCalendarEvent,
+    showToast
+  } = useApp();
+
+  const [isOpen, setIsOpen] = useState<boolean>(true);
+  const now = new Date();
+  const [currentYear, setCurrentYear] = useState<number>(now.getFullYear());
+  const [currentMonth, setCurrentMonth] = useState<number>(now.getMonth()); // 0-11
+  const [selectedDay, setSelectedDay] = useState<CalendarDayInfo | null>(null);
+
+  // Quick Add Event Modal State (For Admin)
+  const [isAddEventOpen, setIsAddEventOpen] = useState<boolean>(false);
+  const [newEventForm, setNewEventForm] = useState({
+    title: '',
+    startDate: now.toISOString().slice(0, 10),
+    endDate: '',
+    category: 'Kegiatan Sekolah',
+    description: '',
+    isHoliday: false
+  });
+
+  const canManage = authSession.role === 'super_admin' || authSession.role === 'custom_admin' || authSession.role === 'class_admin';
+
+  const grid = getCalendarGrid(currentYear, currentMonth, calendarEvents);
+
+  // Month navigation
+  const handlePrevMonth = () => {
+    if (currentMonth === 0) {
+      setCurrentMonth(11);
+      setCurrentYear(prev => prev - 1);
+    } else {
+      setCurrentMonth(prev => prev - 1);
+    }
+  };
+
+  const handleNextMonth = () => {
+    if (currentMonth === 11) {
+      setCurrentMonth(0);
+      setCurrentYear(prev => prev + 1);
+    } else {
+      setCurrentMonth(prev => prev + 1);
+    }
+  };
+
+  const handleResetToToday = () => {
+    const today = new Date();
+    setCurrentYear(today.getFullYear());
+    setCurrentMonth(today.getMonth());
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const todayCell = grid.find(c => c.dateString === todayStr);
+    if (todayCell) setSelectedDay(todayCell);
+  };
+
+  // Count highlights in current month
+  const currentMonthDays = grid.filter(d => d.isCurrentMonth);
+  const redDatesCount = currentMonthDays.filter(d => d.isRedDate).length;
+  const importantDaysCount = currentMonthDays.filter(d => d.isImportantDay).length;
+  const schoolEventsCount = currentMonthDays.filter(d => d.schoolEvents.length > 0).length;
+
+  const handleOpenAddForDate = (dateStr: string) => {
+    setNewEventForm({
+      title: '',
+      startDate: dateStr,
+      endDate: '',
+      category: 'Kegiatan Sekolah',
+      description: '',
+      isHoliday: false
+    });
+    setIsAddEventOpen(true);
+  };
+
+  const handleSaveNewEvent = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newEventForm.title.trim() || !newEventForm.startDate.trim()) return;
+
+    addCalendarEvent({
+      title: newEventForm.title.trim(),
+      startDate: newEventForm.startDate,
+      endDate: newEventForm.endDate || undefined,
+      category: newEventForm.category as any,
+      semester: 'Ganjil',
+      description: newEventForm.description.trim() || undefined,
+      isHoliday: newEventForm.isHoliday,
+      month: new Date(newEventForm.startDate).getMonth() + 1,
+      academicYear: '2026/2027'
+    });
+
+    setIsAddEventOpen(false);
+    showToast(`Jadwal agenda "${newEventForm.title}" berhasil ditambahkan!`, 'success');
+  };
+
+  return (
+    <section className="bg-white dark:bg-[#242422] border border-[#E0E0D8] dark:border-[#383832] rounded-[32px] p-6 sm:p-8 shadow-sm space-y-6">
+      {/* 🔹 HEADER & TOGGLE BAR */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#E0E0D8] dark:border-[#383832] pb-5">
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-2xl bg-[#5A5A40] dark:bg-[#727252] text-white flex items-center justify-center shadow-xs">
+            <CalendarIcon className="w-6 h-6" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="font-serif text-lg sm:text-xl font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">
+                Kalender Interaktif & Hari Penting
+              </h3>
+              <span className="hidden sm:inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#F5F5F0] dark:bg-[#1E1E1C] text-[#5A5A40] dark:text-[#C5C5B0] border border-[#E0E0D8] dark:border-[#383832]">
+                Real-time
+              </span>
+            </div>
+            <p className="text-xs text-[#8E8E85] dark:text-[#A4A49B] mt-0.5">
+              Menampilkan tanggal merah nasional, peringatan hari penting, dan agenda kegiatan sekolah.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => setCurrentView('calendar')}
+            className="px-3.5 py-2 bg-[#F5F5F0] dark:bg-[#1E1E1C] hover:bg-[#EBEBE5] dark:hover:bg-[#2C2C28] text-[#5A5A40] dark:text-[#C5C5B0] text-xs font-bold rounded-xl border border-[#E0E0D8] dark:border-[#383832] flex items-center gap-1.5 transition-all cursor-pointer"
+            title="Buka Kalender Akademik Lengkap"
+          >
+            <BookOpen className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Portal Agenda</span>
+            <ExternalLink className="w-3 h-3 opacity-70" />
+          </button>
+
+          <button
+            type="button"
+            id="btn-toggle-beranda-calendar"
+            onClick={() => setIsOpen(!isOpen)}
+            className="px-4 py-2 bg-[#5A5A40] hover:bg-[#484833] dark:bg-[#727252] dark:hover:bg-[#5C5C42] text-white text-xs font-bold rounded-xl flex items-center gap-2 shadow-xs transition-all cursor-pointer active:scale-95"
+            aria-expanded={isOpen}
+          >
+            <span>{isOpen ? 'Tutup Kalender' : 'Buka Kalender'}</span>
+            {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
+        </div>
+      </div>
+
+      {/* 🔹 EXPANDED CALENDAR CONTENT */}
+      {isOpen && (
+        <div className="space-y-6 transition-all duration-300">
+          {/* 1. Month Bar Controls & Legend */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-[#F8F8F5] dark:bg-[#1E1E1C] p-4 rounded-2xl border border-[#E0E0D8] dark:border-[#383832]">
+            {/* Navigation */}
+            <div className="flex items-center gap-3">
+              <div className="flex items-center bg-white dark:bg-[#242422] rounded-xl border border-[#E0E0D8] dark:border-[#383832] p-1 shadow-2xs">
+                <button
+                  type="button"
+                  onClick={handlePrevMonth}
+                  className="p-1.5 hover:bg-[#F5F5F0] dark:hover:bg-[#1E1E1C] rounded-lg text-[#2D2D2A] dark:text-[#EAEAE2] cursor-pointer transition-colors"
+                  title="Bulan Sebelumnya"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="font-serif font-bold text-sm sm:text-base px-3 text-[#2D2D2A] dark:text-[#F0F0EA] min-w-[140px] text-center">
+                  {MONTH_NAMES_ID[currentMonth]} {currentYear}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleNextMonth}
+                  className="p-1.5 hover:bg-[#F5F5F0] dark:hover:bg-[#1E1E1C] rounded-lg text-[#2D2D2A] dark:text-[#EAEAE2] cursor-pointer transition-colors"
+                  title="Bulan Berikutnya"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleResetToToday}
+                className="px-3 py-1.5 bg-white dark:bg-[#242422] hover:bg-[#F5F5F0] dark:hover:bg-[#2C2C28] text-[#5A5A40] dark:text-[#C5C5B0] border border-[#E0E0D8] dark:border-[#383832] rounded-xl text-xs font-bold cursor-pointer transition-colors shadow-2xs"
+              >
+                Hari Ini
+              </button>
+            </div>
+
+            {/* Color Legend Indicators */}
+            <div className="flex flex-wrap items-center gap-3 text-xs">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-white dark:bg-[#242422] rounded-lg border border-[#E0E0D8] dark:border-[#383832]">
+                <span className="w-2.5 h-2.5 rounded-full bg-rose-600 animate-pulse" />
+                <span className="text-[#2D2D2A] dark:text-[#EAEAE2] font-medium">Tanggal Merah ({redDatesCount})</span>
+              </div>
+              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-white dark:bg-[#242422] rounded-lg border border-[#E0E0D8] dark:border-[#383832]">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
+                <span className="text-[#2D2D2A] dark:text-[#EAEAE2] font-medium">Hari Penting ({importantDaysCount})</span>
+              </div>
+              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-white dark:bg-[#242422] rounded-lg border border-[#E0E0D8] dark:border-[#383832]">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-600" />
+                <span className="text-[#2D2D2A] dark:text-[#EAEAE2] font-medium">Jadwal Sekolah ({schoolEventsCount})</span>
+              </div>
+            </div>
+          </div>
+
+          {/* 2. Interactive Calendar Matrix Grid */}
+          <div className="overflow-x-auto pb-2">
+            <div className="min-w-[620px]">
+              {/* Day Name Headers */}
+              <div className="grid grid-cols-7 gap-2 text-center mb-2">
+                {DAY_NAMES_ID.map((day, idx) => (
+                  <div
+                    key={day}
+                    className={`py-2 text-xs font-bold uppercase tracking-wider rounded-xl ${
+                      idx === 0
+                        ? 'text-rose-600 bg-rose-50/60 dark:bg-rose-950/30'
+                        : 'text-[#8E8E85] dark:text-[#A4A49B] bg-[#F8F8F5] dark:bg-[#1E1E1C]'
+                    }`}
+                  >
+                    {day}
+                  </div>
+                ))}
+              </div>
+
+              {/* Day Cells Grid */}
+              <div className="grid grid-cols-7 gap-2">
+                {grid.map((cell, idx) => {
+                  const isSelected = selectedDay?.dateString === cell.dateString;
+                  const hasHoliday = cell.isRedDate;
+                  const hasImportant = cell.isImportantDay;
+                  const hasSchool = cell.schoolEvents.length > 0;
+
+                  return (
+                    <button
+                      key={`${cell.dateString}-${idx}`}
+                      type="button"
+                      onClick={() => setSelectedDay(cell)}
+                      className={`min-h-[86px] p-2 rounded-2xl border transition-all text-left flex flex-col justify-between group cursor-pointer relative overflow-hidden ${
+                        !cell.isCurrentMonth
+                          ? 'opacity-40 bg-[#FAFAFA] dark:bg-[#1A1A18] border-dashed border-[#E0E0D8] dark:border-[#30302C]'
+                          : isSelected
+                          ? 'bg-[#5A5A40]/10 dark:bg-[#727252]/20 border-[#5A5A40] dark:border-[#C5C5B0] shadow-sm ring-2 ring-[#5A5A40]/30'
+                          : cell.isToday
+                          ? 'bg-amber-50/60 dark:bg-amber-950/20 border-amber-300 dark:border-amber-700 shadow-2xs'
+                          : 'bg-white dark:bg-[#242422] border-[#E0E0D8] dark:border-[#383832] hover:border-[#5A5A40] dark:hover:border-[#727252]'
+                      }`}
+                    >
+                      {/* Top Row: Date Number & Today marker */}
+                      <div className="flex items-center justify-between w-full">
+                        <span
+                          className={`text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center ${
+                            cell.isToday
+                              ? 'bg-[#5A5A40] text-white font-black shadow-xs'
+                              : cell.isSunday || hasHoliday
+                              ? 'text-rose-600 font-bold'
+                              : 'text-[#2D2D2A] dark:text-[#EAEAE2]'
+                          }`}
+                        >
+                          {cell.dayNumber}
+                        </span>
+
+                        {/* Status Dots Pill */}
+                        <div className="flex items-center gap-1">
+                          {hasHoliday && (
+                            <span className="w-2 h-2 rounded-full bg-rose-600" title="Tanggal Merah / Libur" />
+                          )}
+                          {hasImportant && (
+                            <span className="w-2 h-2 rounded-full bg-amber-400" title="Hari Penting Nasional" />
+                          )}
+                          {hasSchool && (
+                            <span className="w-2 h-2 rounded-full bg-emerald-600" title="Jadwal Sekolah" />
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Content Snippet in Cell */}
+                      <div className="space-y-1 mt-1">
+                        {hasHoliday && cell.redDateReasons[0] && cell.redDateReasons[0] !== 'Hari Libur Akhir Pekan (Minggu)' && (
+                          <div className="text-[9px] font-bold text-rose-700 dark:text-rose-400 truncate bg-rose-50 dark:bg-rose-950/50 px-1.5 py-0.5 rounded-md">
+                            🔴 {cell.redDateReasons[0]}
+                          </div>
+                        )}
+                        {hasImportant && cell.importantDayReasons[0] && (
+                          <div className="text-[9px] font-bold text-amber-800 dark:text-amber-300 truncate bg-amber-50 dark:bg-amber-950/50 px-1.5 py-0.5 rounded-md">
+                            🟡 {cell.importantDayReasons[0]}
+                          </div>
+                        )}
+                        {hasSchool && cell.schoolEvents[0] && (
+                          <div className="text-[9px] font-bold text-emerald-800 dark:text-emerald-300 truncate bg-emerald-50 dark:bg-emerald-950/50 px-1.5 py-0.5 rounded-md">
+                            🟢 {cell.schoolEvents[0].title}
+                          </div>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* 3. Selected Date Detail Banner / Inspector */}
+          {selectedDay && (
+            <div className="p-5 bg-[#F8F8F5] dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#383832] rounded-2xl space-y-4 animate-fadeIn">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E0E0D8] dark:border-[#383832] pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-xl bg-white dark:bg-[#242422] border border-[#E0E0D8] dark:border-[#383832] text-[#5A5A40] dark:text-[#C5C5B0]">
+                    <Clock className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="font-serif text-base font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">
+                      Detail Tanggal:{' '}
+                      {new Date(selectedDay.dateString + 'T00:00:00').toLocaleDateString('id-ID', {
+                        weekday: 'long',
+                        day: 'numeric',
+                        month: 'long',
+                        year: 'numeric'
+                      })}
+                    </h4>
+                    <p className="text-[11px] text-[#8E8E85] dark:text-[#A4A49B]">
+                      {selectedDay.isToday ? '🌟 Ini adalah hari ini' : 'Klik hari lain pada kalender untuk melihat rincian.'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {canManage && (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenAddForDate(selectedDay.dateString)}
+                      className="px-3 py-1.5 bg-[#5A5A40] hover:bg-[#484833] text-white text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer shadow-2xs transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>+ Jadwal Pada Tanggal Ini</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDay(null)}
+                    className="p-1.5 text-[#8E8E85] hover:text-[#2D2D2A] dark:hover:text-white rounded-lg hover:bg-white dark:hover:bg-[#242422] transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Event Lists for Date */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+                {/* 1. Tanggal Merah */}
+                <div className="p-3.5 bg-white dark:bg-[#242422] rounded-xl border border-rose-200 dark:border-rose-900/50 space-y-2">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-rose-700 dark:text-rose-400">
+                    <span className="w-2.5 h-2.5 rounded-full bg-rose-600" />
+                    <span>Tanggal Merah & Libur</span>
+                  </div>
+                  {selectedDay.redDateReasons.length > 0 ? (
+                    <ul className="space-y-1.5 text-xs text-[#2D2D2A] dark:text-[#EAEAE2]">
+                      {selectedDay.redDateReasons.map((r, i) => (
+                        <li key={i} className="flex items-start gap-1.5">
+                          <span className="text-rose-500 font-bold">•</span>
+                          <span>{r}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-xs text-[#8E8E85] dark:text-[#7A7A72] italic">Bukan hari libur nasional.</p>
+                  )}
+                </div>
+
+                {/* 2. Hari Penting Nasional */}
+                <div className="p-3.5 bg-white dark:bg-[#242422] rounded-xl border border-amber-200 dark:border-amber-900/50 space-y-2">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-amber-800 dark:text-amber-300">
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
+                    <span>Hari Penting Nasional</span>
+                  </div>
+                  {selectedDay.importantDayReasons.length > 0 ? (
+                    <ul className="space-y-1.5 text-xs text-[#2D2D2A] dark:text-[#EAEAE2]">
+                      {selectedDay.importantDayReasons.map((r, i) => (
+                        <li key={i} className="flex items-start gap-1.5">
+                          <span className="text-amber-500 font-bold">•</span>
+                          <span className="font-semibold">{r}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-xs text-[#8E8E85] dark:text-[#7A7A72] italic">Tidak ada peringatan khusus.</p>
+                  )}
+                </div>
+
+                {/* 3. Jadwal Sekolah Dibuat */}
+                <div className="p-3.5 bg-white dark:bg-[#242422] rounded-xl border border-emerald-200 dark:border-emerald-900/50 space-y-2">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-800 dark:text-emerald-300">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-600" />
+                    <span>Jadwal Agenda Sekolah ({selectedDay.schoolEvents.length})</span>
+                  </div>
+                  {selectedDay.schoolEvents.length > 0 ? (
+                    <ul className="space-y-1.5 text-xs text-[#2D2D2A] dark:text-[#EAEAE2]">
+                      {selectedDay.schoolEvents.map((evt) => (
+                        <li key={evt.id} className="p-2 bg-[#F5F5F0] dark:bg-[#1E1E1C] rounded-lg space-y-0.5">
+                          <div className="font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">{evt.title}</div>
+                          <div className="text-[10px] text-[#8E8E85] dark:text-[#A4A49B]">
+                            Kategori: {evt.category} {evt.semester ? `• Semester ${evt.semester}` : ''}
+                          </div>
+                          {evt.description && (
+                            <div className="text-[11px] text-[#5A5A40] dark:text-[#C5C5B0] mt-1">
+                              {evt.description}
+                            </div>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-xs text-[#8E8E85] dark:text-[#7A7A72] italic">Tidak ada jadwal sekolah khusus.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 🔹 QUICK ADD EVENT MODAL (FOR ADMIN) */}
+      {isAddEventOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#242422] border border-[#E0E0D8] dark:border-[#383832] rounded-[32px] p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-5 animate-scaleUp">
+            <div className="flex items-center justify-between border-b border-[#E0E0D8] dark:border-[#383832] pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-[#5A5A40] text-white rounded-xl">
+                  <CalendarIcon className="w-4 h-4" />
+                </div>
+                <h3 className="font-serif text-lg font-bold text-[#2D2D2A] dark:text-[#F0F0EA]">
+                  Tambah Jadwal Sekolah
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddEventOpen(false)}
+                className="p-1 text-[#8E8E85] hover:text-[#2D2D2A] dark:hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveNewEvent} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-[#2D2D2A] dark:text-[#EAEAE2] mb-1">
+                  Nama Agenda / Kegiatan *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: Ujian Akhir Semester / Upacara Hardiknas"
+                  value={newEventForm.title}
+                  onChange={e => setNewEventForm({ ...newEventForm, title: e.target.value })}
+                  className="w-full px-3.5 py-2 rounded-xl bg-[#F8F8F5] dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#383832] text-xs text-[#2D2D2A] dark:text-white focus:outline-none focus:border-[#5A5A40]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] dark:text-[#EAEAE2] mb-1">
+                    Tanggal Mulai *
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={newEventForm.startDate}
+                    onChange={e => setNewEventForm({ ...newEventForm, startDate: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-[#F8F8F5] dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#383832] text-xs text-[#2D2D2A] dark:text-white focus:outline-none focus:border-[#5A5A40]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] dark:text-[#EAEAE2] mb-1">
+                    Tanggal Selesai
+                  </label>
+                  <input
+                    type="date"
+                    value={newEventForm.endDate}
+                    onChange={e => setNewEventForm({ ...newEventForm, endDate: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-[#F8F8F5] dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#383832] text-xs text-[#2D2D2A] dark:text-white focus:outline-none focus:border-[#5A5A40]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#2D2D2A] dark:text-[#EAEAE2] mb-1">
+                  Kategori Agenda
+                </label>
+                <select
+                  value={newEventForm.category}
+                  onChange={e => setNewEventForm({ ...newEventForm, category: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-[#F8F8F5] dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#383832] text-xs text-[#2D2D2A] dark:text-white focus:outline-none focus:border-[#5A5A40]"
+                >
+                  <option value="Kegiatan Sekolah">🎯 Kegiatan Sekolah</option>
+                  <option value="Ujian / Evaluasi">📝 Ujian / Evaluasi</option>
+                  <option value="Rapat & KBM">📚 Rapat & KBM</option>
+                  <option value="Hari Penting">🟡 Hari Penting</option>
+                  <option value="Libur Sekolah">🔴 Libur Sekolah</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#2D2D2A] dark:text-[#EAEAE2] mb-1">
+                  Keterangan Tambahan
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="Catatan kegiatan..."
+                  value={newEventForm.description}
+                  onChange={e => setNewEventForm({ ...newEventForm, description: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-[#F8F8F5] dark:bg-[#1E1E1C] border border-[#E0E0D8] dark:border-[#383832] text-xs text-[#2D2D2A] dark:text-white focus:outline-none focus:border-[#5A5A40]"
+                />
+              </div>
+
+              <label className="flex items-center gap-2 text-xs font-bold text-[#2D2D2A] dark:text-[#EAEAE2] cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={newEventForm.isHoliday}
+                  onChange={e => setNewEventForm({ ...newEventForm, isHoliday: e.target.checked })}
+                  className="rounded text-[#5A5A40]"
+                />
+                <span>Tandai sebagai Tanggal Merah / Libur Sekolah</span>
+              </label>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAddEventOpen(false)}
+                  className="px-4 py-2 bg-[#F5F5F0] dark:bg-[#1E1E1C] text-[#8E8E85] rounded-xl text-xs font-bold"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-[#5A5A40] text-white rounded-xl text-xs font-bold shadow-xs hover:bg-[#484833]"
+                >
+                  Simpan Agenda
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+};

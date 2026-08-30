@@ -1,0 +1,441 @@
+import React, { useState } from 'react';
+import { useApp } from '../context/AppContext';
+import { Announcement } from '../types';
+import { MediaUploadField } from '../components/MediaUploadField';
+import { SocialActions } from '../components/SocialActions';
+import { ScrollEmboss } from '../components/ScrollEmboss';
+import { QRCodeModal, QRCodeData } from '../components/QRCodeModal';
+import { 
+  Megaphone, 
+  Calendar, 
+  User, 
+  Pin, 
+  Plus, 
+  Search, 
+  Edit3, 
+  Trash2, 
+  X, 
+  CheckCircle2, 
+  AlertCircle,
+  FileText,
+  Image as ImageIcon,
+  Save,
+  QrCode
+} from 'lucide-react';
+
+export const AnnouncementsView: React.FC = () => {
+  const { 
+    announcements, 
+    authSession, 
+    addAnnouncement, 
+    updateAnnouncement, 
+    deleteAnnouncement,
+    toggleAnnouncementLike,
+    addAnnouncementComment,
+    incrementAnnouncementShare,
+    requestDeleteConfirm 
+  } = useApp();
+
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('Semua');
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [editingAnn, setEditingAnn] = useState<Announcement | null>(null);
+  const [qrModalData, setQrModalData] = useState<QRCodeData | null>(null);
+
+  // Form State
+  const [formState, setFormState] = useState({
+    title: '',
+    date: new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date()),
+    category: 'Akademik' as Announcement['category'],
+    content: '',
+    imageUrl: '',
+    author: 'Bagian Kurikulum & Kesiswaan',
+    isPinned: false
+  });
+
+  const categories: string[] = ['Semua', 'Akademik', 'Libur & Ujian', 'Kegiatan', 'Pemberitahuan', 'PPDB', 'Umum'];
+
+  const filteredAnnouncements = announcements.filter(ann => {
+    const matchSearch = ann.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        ann.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        ann.author.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchCat = selectedCategory === 'Semua' || ann.category === selectedCategory;
+    return matchSearch && matchCat;
+  });
+
+  const handleOpenAdd = () => {
+    setEditingAnn(null);
+    setFormState({
+      title: '',
+      date: new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date()),
+      category: 'Akademik',
+      content: '',
+      imageUrl: '',
+      author: 'Bagian Kurikulum & Kesiswaan',
+      isPinned: false
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEdit = (ann: Announcement) => {
+    setEditingAnn(ann);
+    setFormState({
+      title: ann.title,
+      date: ann.date,
+      category: ann.category,
+      content: ann.content,
+      imageUrl: ann.imageUrl || '',
+      author: ann.author,
+      isPinned: !!ann.isPinned
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formState.title.trim() || !formState.content.trim()) return;
+
+    if (editingAnn) {
+      updateAnnouncement(editingAnn.id, {
+        title: formState.title.trim(),
+        date: formState.date.trim(),
+        category: formState.category,
+        content: formState.content.trim(),
+        imageUrl: formState.imageUrl.trim() || undefined,
+        author: formState.author.trim(),
+        isPinned: formState.isPinned
+      });
+    } else {
+      addAnnouncement({
+        title: formState.title.trim(),
+        date: formState.date.trim(),
+        category: formState.category,
+        content: formState.content.trim(),
+        imageUrl: formState.imageUrl.trim() || undefined,
+        author: formState.author.trim(),
+        isPinned: formState.isPinned
+      });
+    }
+    setIsModalOpen(false);
+  };
+
+  return (
+    <div className="space-y-8 pb-24 text-[#2D2D2A]">
+      {/* Top Banner Header */}
+      <div className="bg-white border border-[#E0E0D8] rounded-[32px] p-6 sm:p-8 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="space-y-2">
+          <div className="inline-flex items-center gap-2 px-3 py-1 bg-[#F5F5F0] text-[#5A5A40] text-xs font-bold uppercase tracking-widest rounded-full border border-[#E0E0D8]">
+            <Megaphone className="w-3.5 h-3.5 text-[#5A5A40]" />
+            <span>Papan Pengumuman & Surat Edaran Resmi</span>
+          </div>
+          <h2 className="font-serif text-2xl sm:text-3xl font-bold text-[#2D2D2A] tracking-tight">
+            Pengumuman Sekolah
+          </h2>
+          <p className="text-[#8E8E85] text-sm max-w-xl">
+            Informasi resmi mengenai kalender akademik, jadwal asesmen, agenda rapat wali murid, serta hari libur sekolah. Pengumuman terkini selalu tampil di posisi teratas.
+          </p>
+        </div>
+
+        {authSession.role === 'super_admin' && (
+          <button
+            id="btn-add-announcement"
+            onClick={handleOpenAdd}
+            className="px-5 py-3 rounded-2xl bg-[#5A5A40] hover:bg-[#484833] text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer flex-shrink-0"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Terbitkan Pengumuman Baru</span>
+          </button>
+        )}
+      </div>
+
+      {/* Filter and Search */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="relative w-full sm:w-80">
+          <Search className="w-4 h-4 absolute left-3.5 top-3 text-[#8E8E85]" />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            placeholder="Cari kata kunci / nomor edaran..."
+            className="w-full pl-10 pr-4 py-2.5 bg-white border border-[#E0E0D8] rounded-2xl text-sm text-[#2D2D2A] placeholder-[#8E8E85] focus:outline-none focus:border-[#5A5A40]"
+          />
+        </div>
+
+        <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0 scrollbar-none">
+          {categories.map(cat => (
+            <button
+              key={cat}
+              onClick={() => setSelectedCategory(cat)}
+              className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                selectedCategory === cat
+                  ? 'bg-[#5A5A40] text-white shadow-sm'
+                  : 'bg-white text-[#8E8E85] hover:text-[#2D2D2A] border border-[#E0E0D8]'
+              }`}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Announcements List */}
+      {filteredAnnouncements.length === 0 ? (
+        <div className="bg-white border border-[#E0E0D8] rounded-[32px] p-12 text-center text-[#8E8E85]">
+          <Megaphone className="w-12 h-12 mx-auto text-[#8E8E85] mb-3" />
+          <p className="font-serif text-base font-bold text-[#2D2D2A]">Tidak ada pengumuman yang sesuai kriteria pencarian.</p>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {filteredAnnouncements.map((ann, idx) => (
+            <ScrollEmboss key={ann.id} delay={idx * 50}>
+              <div
+                className={`bg-white border rounded-[32px] p-6 sm:p-8 shadow-sm transition-all flex flex-col justify-between gap-6 ${
+                  ann.isPinned ? 'border-[#8C4A32]/40 ring-1 ring-[#8C4A32]/20' : 'border-[#E0E0D8]'
+                }`}
+              >
+                <div className="flex flex-col lg:flex-row items-start justify-between gap-6">
+                  <div className="space-y-3 flex-1">
+                    {/* Category & Pin Badge */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      {ann.isPinned && (
+                        <span className="px-3 py-1 text-xs font-bold uppercase tracking-wider bg-[#8C4A32] text-white rounded-xl flex items-center gap-1">
+                          <Pin className="w-3 h-3" />
+                          <span>Dismatkan</span>
+                        </span>
+                      )}
+
+                      <span className="px-3 py-1 text-xs font-bold bg-[#F5F5F0] text-[#5A5A40] border border-[#E0E0D8] rounded-xl">
+                        {ann.category}
+                      </span>
+
+                      <span className="text-xs text-[#8E8E85] flex items-center gap-1.5 ml-1">
+                        <Calendar className="w-3.5 h-3.5 text-[#5A5A40]" />
+                        <span>{ann.date}</span>
+                      </span>
+                    </div>
+
+                    {/* Title */}
+                    <h3 className="font-serif text-lg sm:text-xl font-bold text-[#2D2D2A] tracking-tight">
+                      {ann.title}
+                    </h3>
+
+                    {/* Content body */}
+                    <p className="text-sm sm:text-base text-[#2D2D2A] leading-relaxed whitespace-pre-line bg-[#F8F8F5] p-5 rounded-2xl border border-[#E0E0D8]">
+                      {ann.content}
+                    </p>
+
+                    {/* Optional Image attachment */}
+                    {ann.imageUrl && (
+                      <div className="mt-4 rounded-2xl overflow-hidden max-w-lg border border-[#E0E0D8] bg-[#F5F5F0]">
+                        <img
+                          src={ann.imageUrl}
+                          alt={ann.title}
+                          className="w-full max-h-72 object-cover"
+                          loading="lazy"
+                        />
+                      </div>
+                    )}
+
+                    {/* Author Sign & QR Share Button */}
+                    <div className="pt-3 flex items-center justify-between gap-2 text-xs text-[#8E8E85] border-t border-[#E0E0D8]">
+                      <div className="flex items-center gap-2">
+                        <User className="w-3.5 h-3.5 text-[#5A5A40]" />
+                        <span>Diterbitkan oleh: <strong className="text-[#2D2D2A]">{ann.author}</strong></span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setQrModalData({
+                          type: 'announcement',
+                          id: ann.id,
+                          title: ann.title,
+                          subtitle: `${ann.date} • ${ann.category} • Oleh ${ann.author}`,
+                          category: ann.category
+                        })}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#F5F5F0] hover:bg-[#5A5A40] text-[#5A5A40] hover:text-white border border-[#E0E0D8] text-[11px] font-bold transition-all cursor-pointer shadow-2xs"
+                        title="Buat & Pindai Kode QR Pengumuman Ini"
+                      >
+                        <QrCode className="w-3.5 h-3.5" />
+                        <span>QR Pengumuman</span>
+                      </button>
+                    </div>
+
+                    {/* Social Actions (Like, Comment, Share) */}
+                    <div className="pt-2">
+                      <SocialActions
+                        itemId={ann.id}
+                        itemTitle={ann.title}
+                        itemCategory={ann.category}
+                        likes={ann.likes || 0}
+                        likedBy={ann.likedBy || []}
+                        comments={ann.comments || []}
+                        shares={ann.shares || 0}
+                        onToggleLike={() => toggleAnnouncementLike(ann.id)}
+                        onAddComment={(content, author) => addAnnouncementComment(ann.id, content, author)}
+                        onShare={() => incrementAnnouncementShare(ann.id)}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Super Admin Actions */}
+                  {authSession.role === 'super_admin' && (
+                    <div className="flex lg:flex-col items-center gap-2 flex-shrink-0 w-full lg:w-auto justify-end border-t lg:border-t-0 pt-3 lg:pt-0 border-[#E0E0D8]">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEdit(ann)}
+                        className="px-3 py-1.5 rounded-xl bg-[#F5F5F0] hover:bg-[#E0E0D8] text-[#5A5A40] text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                        <span>Edit</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          requestDeleteConfirm({
+                            itemName: ann.title,
+                            message: 'Yakin ingin menghapus pengumuman ini? Tindakan ini tidak bisa dibatalkan.',
+                            onConfirm: () => deleteAnnouncement(ann.id)
+                          });
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-[#8C4A32]/10 hover:bg-[#8C4A32]/20 text-[#8C4A32] text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Hapus</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </ScrollEmboss>
+          ))}
+        </div>
+      )}
+
+      {/* 🔹 ADD / EDIT ANNOUNCEMENT MODAL */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
+          <div className="relative w-full max-w-2xl bg-white border border-[#E0E0D8] rounded-[32px] shadow-2xl p-6 sm:p-8 max-h-[90vh] overflow-y-auto text-[#2D2D2A]">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E0E0D8] mb-4">
+              <h3 className="font-serif text-xl font-bold text-[#5A5A40]">
+                {editingAnn ? 'Edit Pengumuman Sekolah' : 'Terbitkan Pengumuman Baru'}
+              </h3>
+              <button onClick={() => setIsModalOpen(false)} className="text-[#8E8E85] hover:text-[#2D2D2A] p-1.5 rounded-xl hover:bg-[#F5F5F0]">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSave} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Judul Pengumuman *</label>
+                <input
+                  type="text"
+                  required
+                  value={formState.title}
+                  onChange={e => setFormState({ ...formState, title: e.target.value })}
+                  placeholder="Contoh: Jadwal Penilaian Akhir Semester (PAS) Ganjil 2024/2025"
+                  className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-sm focus:outline-none focus:border-[#5A5A40]"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Tanggal Terbit *</label>
+                  <input
+                    type="text"
+                    required
+                    value={formState.date}
+                    onChange={e => setFormState({ ...formState, date: e.target.value })}
+                    placeholder="Contoh: 15 November 2024"
+                    className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-sm focus:outline-none focus:border-[#5A5A40]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Kategori Pengumuman *</label>
+                  <select
+                    value={formState.category}
+                    onChange={e => setFormState({ ...formState, category: e.target.value as Announcement['category'] })}
+                    className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-sm focus:outline-none focus:border-[#5A5A40]"
+                  >
+                    {categories.filter(c => c !== 'Semua').map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Penerbit / Penanggung Jawab</label>
+                <input
+                  type="text"
+                  value={formState.author}
+                  onChange={e => setFormState({ ...formState, author: e.target.value })}
+                  placeholder="Contoh: Kepala Sekolah / Bagian Kesiswaan"
+                  className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-sm focus:outline-none focus:border-[#5A5A40]"
+                />
+              </div>
+
+              <div className="p-4 bg-[#F8F8F5] rounded-2xl border border-[#E0E0D8]">
+                <MediaUploadField
+                  id="announcement-image-upload"
+                  label="Lampiran Gambar / Surat Edaran (Opsional)"
+                  mediaType="image"
+                  value={formState.imageUrl}
+                  onChange={url => setFormState({ ...formState, imageUrl: url })}
+                  required={false}
+                  helperText="Upload gambar surat edaran bersifat opsional. Jika tidak diisi, lampiran gambar tidak ditampilkan."
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Isi Lengkap Pengumuman *</label>
+                <textarea
+                  rows={6}
+                  required
+                  value={formState.content}
+                  onChange={e => setFormState({ ...formState, content: e.target.value })}
+                  placeholder="Tuliskan isi surat edaran, instruksi untuk siswa, jadwal penting, dan ketentuan lainnya..."
+                  className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-sm focus:outline-none focus:border-[#5A5A40]"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 p-3 bg-[#F8F8F5] rounded-xl border border-[#E0E0D8]">
+                <input
+                  type="checkbox"
+                  id="pin-announcement"
+                  checked={formState.isPinned}
+                  onChange={e => setFormState({ ...formState, isPinned: e.target.checked })}
+                  className="w-4 h-4 text-[#5A5A40] rounded focus:ring-0 cursor-pointer"
+                />
+                <label htmlFor="pin-announcement" className="text-xs font-bold text-[#2D2D2A] cursor-pointer">
+                  📌 Sematkan Pengumuman Ini (Tampil paling atas dan ditandai khusus)
+                </label>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#E0E0D8]">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 bg-[#E0E0D8] hover:bg-[#D0D0C8] text-[#2D2D2A] text-xs font-bold rounded-xl cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-2 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-md cursor-pointer hover:scale-[1.02] active:scale-95 transition-all"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>TERBITKAN PENGUMUMAN</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* 📱 QR CODE MODAL */}
+      <QRCodeModal
+        isOpen={!!qrModalData}
+        onClose={() => setQrModalData(null)}
+        data={qrModalData}
+      />
+    </div>
+  );
+};

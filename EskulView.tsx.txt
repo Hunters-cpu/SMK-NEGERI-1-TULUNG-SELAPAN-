@@ -1,0 +1,2045 @@
+import React, { useState, useRef, useEffect } from 'react';
+import { useApp } from '../context/AppContext';
+import { EskulItem, EskulMember, EskulGalleryPhoto } from '../types';
+import { SocialActions } from '../components/SocialActions';
+import { MediaUploadField } from '../components/MediaUploadField';
+import { MultiMediaUploadField, MultiMediaItem } from '../components/MultiMediaUploadField';
+import { ScrollEmboss } from '../components/ScrollEmboss';
+import { TikTokIcon } from '../components/TikTokIcon';
+import { 
+  Award, 
+  Users, 
+  MessageSquare, 
+  Calendar, 
+  MapPin, 
+  Plus, 
+  Search, 
+  Trash2, 
+  Edit3, 
+  ChevronRight, 
+  ArrowLeft, 
+  Send, 
+  Image as ImageIcon, 
+  Sparkles, 
+  CheckCircle, 
+  Clock, 
+  Heart, 
+  ShieldCheck, 
+  UserPlus, 
+  X, 
+  Save, 
+  Camera, 
+  Share2,
+  Lock,
+  UserCheck,
+  ExternalLink,
+  CheckCircle2,
+  XCircle,
+  FileText,
+  UserCheck2,
+  AlertTriangle
+} from 'lucide-react';
+
+export const EskulView: React.FC = () => {
+  const {
+    eskulList,
+    selectedEskulId,
+    setSelectedEskulId,
+    openEskul,
+    authSession,
+    classes,
+    students,
+    addEskul,
+    updateEskul,
+    deleteEskul,
+    addEskulMessage,
+    deleteEskulMessage,
+    toggleEskulMessageLike,
+    addEskulMember,
+    updateEskulMember,
+    deleteEskulMember,
+    addEskulPhoto,
+    addEskulPhotosBatch,
+    deleteEskulPhoto,
+    toggleEskulPhotoLike,
+    addEskulPhotoComment,
+    incrementEskulPhotoShare,
+    requestToJoinEskul,
+    reviewJoinRequest,
+    requestDeleteConfirm,
+    showToast
+  } = useApp();
+
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('Semua');
+  const [isAddEskulModalOpen, setIsAddEskulModalOpen] = useState<boolean>(false);
+  const [editingEskul, setEditingEskul] = useState<EskulItem | null>(null);
+
+  // Active Eskul Detail State
+  const [activeTab, setActiveTab] = useState<'chat' | 'gallery' | 'members' | 'info' | 'requests'>('chat');
+  const [messageInput, setMessageInput] = useState<string>('');
+  const [messageMediaUrl, setMessageMediaUrl] = useState<string>('');
+  const [showAttachMedia, setShowAttachMedia] = useState<boolean>(false);
+  const [isAddPhotoModalOpen, setIsAddPhotoModalOpen] = useState<boolean>(false);
+  
+  // Member Modal State (Add / Edit)
+  const [isMemberModalOpen, setIsMemberModalOpen] = useState<boolean>(false);
+  const [editingMember, setEditingMember] = useState<EskulMember | null>(null);
+
+  // Join Eskul Modal State
+  const [isJoinModalOpen, setIsJoinModalOpen] = useState<boolean>(false);
+  const [joinForm, setJoinForm] = useState({
+    studentName: authSession.name || '',
+    classGrade: authSession.classId ? (classes.find(c => c.id === authSession.classId)?.name || 'Kelas 10') : 'Kelas 10',
+    nis: '',
+    contact: '',
+    reason: ''
+  });
+
+  // Form states
+  const [eskulForm, setEskulForm] = useState({
+    name: '',
+    category: 'Olahraga & Prestasi',
+    description: '',
+    coach: '',
+    ketua: '',
+    schedule: '',
+    location: '',
+    coverUrl: '',
+    logoUrl: '',
+    tiktokUrl: ''
+  });
+
+  // TikTok Quick Edit State (for Super Admin & Class Admin)
+  const [isEditingTikTok, setIsEditingTikTok] = useState<boolean>(false);
+  const [tiktokInput, setTiktokInput] = useState<string>('');
+
+  const canManageEskul = authSession.role === 'super_admin' || authSession.role === 'class_admin';
+
+  const [photoForm, setPhotoForm] = useState({
+    title: '',
+    caption: '',
+    photoUrl: '',
+    date: new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date())
+  });
+  const [multiMediaList, setMultiMediaList] = useState<MultiMediaItem[]>([]);
+
+  const [memberForm, setMemberForm] = useState({
+    name: '',
+    classGrade: 'Kelas 11',
+    role: 'Anggota' as EskulMember['role'],
+    photoUrl: '',
+    contact: ''
+  });
+
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  const selectedEskul = eskulList.find(e => e.id === selectedEskulId);
+
+  const isSuperAdmin = authSession.role === 'super_admin';
+  const isThisEskulAdmin = (authSession.role === 'eskul_admin' && authSession.eskulId === selectedEskul?.id) || isSuperAdmin;
+  const isClassAdmin = authSession.role === 'class_admin';
+
+  // Check if current user is an accepted member
+  const isAcceptedMember = Boolean(
+    isSuperAdmin ||
+    isThisEskulAdmin ||
+    isClassAdmin ||
+    (selectedEskul?.members || []).some(m => 
+      (authSession.studentId && m.id === authSession.studentId) ||
+      (authSession.name && m.name.toLowerCase() === authSession.name.toLowerCase())
+    ) ||
+    (selectedEskul?.students || []).some(s =>
+      (authSession.studentId && s.id === authSession.studentId) ||
+      (authSession.name && s.name.toLowerCase() === authSession.name.toLowerCase())
+    ) ||
+    (selectedEskul?.joinRequests || []).some(r =>
+      r.status === 'accepted' && (
+        (authSession.studentId && r.studentId === authSession.studentId) ||
+        (authSession.name && r.studentName.toLowerCase() === authSession.name.toLowerCase())
+      )
+    )
+  );
+
+  // Check pending or rejected request for current student
+  const pendingRequest = (selectedEskul?.joinRequests || []).find(r =>
+    r.status === 'pending' && (
+      (authSession.studentId && r.studentId === authSession.studentId) ||
+      (authSession.name && r.studentName.toLowerCase() === authSession.name.toLowerCase())
+    )
+  );
+
+  const rejectedRequest = (selectedEskul?.joinRequests || []).find(r =>
+    r.status === 'rejected' && (
+      (authSession.studentId && r.studentId === authSession.studentId) ||
+      (authSession.name && r.studentName.toLowerCase() === authSession.name.toLowerCase())
+    )
+  );
+
+  const pendingRequestsList = (selectedEskul?.joinRequests || []).filter(r => r.status === 'pending');
+  const allRequestsList = selectedEskul?.joinRequests || [];
+
+  const handleOpenJoinModal = () => {
+    setJoinForm({
+      studentName: authSession.name || '',
+      classGrade: authSession.classId ? (classes.find(c => c.id === authSession.classId)?.name || 'Kelas 10') : 'Kelas 10',
+      nis: '',
+      contact: '',
+      reason: ''
+    });
+    setIsJoinModalOpen(true);
+  };
+
+  const handleJoinSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedEskul) return;
+    if (!joinForm.studentName.trim()) {
+      showToast('Silakan isi nama lengkap siswa.', 'warning');
+      return;
+    }
+    const success = requestToJoinEskul(selectedEskul.id, {
+      studentId: authSession.studentId,
+      studentName: joinForm.studentName.trim(),
+      classGrade: joinForm.classGrade.trim(),
+      nis: joinForm.nis.trim() || undefined,
+      contact: joinForm.contact.trim() || undefined,
+      reason: joinForm.reason.trim() || undefined
+    });
+    if (success) {
+      setIsJoinModalOpen(false);
+      showToast('Permohonan bergabung berhasil dikirim! Menunggu konfirmasi Admin Eskul.', 'success');
+    }
+  };
+
+  const handleReviewRequest = (requestId: string, action: 'accept' | 'reject') => {
+    if (!selectedEskul) return;
+    const req = selectedEskul.joinRequests?.find(r => r.id === requestId);
+    const success = reviewJoinRequest(selectedEskul.id, requestId, action);
+    if (success) {
+      if (action === 'accept') {
+        showToast(`Permohonan ${req?.studentName || 'siswa'} telah DITERIMA. Siswa resmi terdaftar di anggota Eskul & data OSIS!`, 'success');
+      } else {
+        showToast(`Permohonan ${req?.studentName || 'siswa'} telah DITOLAK. Siswa dalam mode lihat saja.`, 'info');
+      }
+    }
+  };
+
+  // Auto scroll chat to bottom when messages change
+  useEffect(() => {
+    if (activeTab === 'chat' && chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [selectedEskul?.messages?.length, activeTab]);
+
+  const categories = [
+    'Semua',
+    'Kepemimpinan & Bela Negara',
+    'Olahraga & Prestasi',
+    'Seni, Budaya & Keagamaan',
+    'Sains, Riset & Teknologi'
+  ];
+
+  const filteredEskuls = eskulList.filter(item => {
+    const term = searchTerm.toLowerCase();
+    const matchesSearch = item.name.toLowerCase().includes(term) ||
+                          (item.coach || '').toLowerCase().includes(term) ||
+                          (item.ketua || '').toLowerCase().includes(term) ||
+                          (item.description && item.description.toLowerCase().includes(term));
+    const matchesCategory = selectedCategory === 'Semua' || item.category === selectedCategory;
+    return matchesSearch && matchesCategory;
+  });
+
+  // Open Eskul Modals
+  const handleOpenAddEskul = () => {
+    setEditingEskul(null);
+    setEskulForm({
+      name: '',
+      category: 'Olahraga & Prestasi',
+      description: '',
+      coach: '',
+      ketua: '',
+      schedule: '',
+      location: '',
+      coverUrl: '',
+      logoUrl: '',
+      tiktokUrl: ''
+    });
+    setIsAddEskulModalOpen(true);
+  };
+
+  const handleOpenEditEskul = (eskul: EskulItem) => {
+    setEditingEskul(eskul);
+    setEskulForm({
+      name: eskul.name || '',
+      category: eskul.category || 'Olahraga & Prestasi',
+      description: eskul.description || '',
+      coach: eskul.coach || '',
+      ketua: eskul.ketua || '',
+      schedule: eskul.schedule || '',
+      location: eskul.location || '',
+      coverUrl: eskul.coverUrl || '',
+      logoUrl: eskul.logoUrl || '',
+      tiktokUrl: eskul.tiktokUrl || ''
+    });
+    setIsAddEskulModalOpen(true);
+  };
+
+  const handleDeleteEskul = (eskul: EskulItem) => {
+    requestDeleteConfirm({
+      itemName: `Ekstrakurikuler "${eskul.name}"`,
+      message: `Yakin ingin menghapus ekstrakurikuler "${eskul.name}" beserta seluruh data anggota, arsip galeri, dan ruang obrolannya? Tindakan ini tidak dapat dibatalkan.`,
+      onConfirm: () => {
+        deleteEskul(eskul.id);
+        if (selectedEskulId === eskul.id) {
+          setSelectedEskulId(null);
+        }
+      }
+    });
+  };
+
+  const handleSaveEskul = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!eskulForm.name.trim()) return;
+
+    if (editingEskul) {
+      updateEskul(editingEskul.id, {
+        name: eskulForm.name.trim(),
+        category: eskulForm.category,
+        description: eskulForm.description.trim(),
+        coach: eskulForm.coach.trim(),
+        ketua: eskulForm.ketua.trim(),
+        schedule: eskulForm.schedule.trim(),
+        location: eskulForm.location.trim(),
+        coverUrl: eskulForm.coverUrl.trim() || undefined,
+        logoUrl: eskulForm.logoUrl.trim() || undefined,
+        tiktokUrl: eskulForm.tiktokUrl.trim() || undefined
+      });
+      setEditingEskul(null);
+    } else {
+      addEskul({
+        name: eskulForm.name.trim(),
+        category: eskulForm.category,
+        description: eskulForm.description.trim(),
+        coach: eskulForm.coach.trim(),
+        ketua: eskulForm.ketua.trim(),
+        schedule: eskulForm.schedule.trim(),
+        location: eskulForm.location.trim(),
+        coverUrl: eskulForm.coverUrl.trim() || undefined,
+        logoUrl: eskulForm.logoUrl.trim() || undefined,
+        tiktokUrl: eskulForm.tiktokUrl.trim() || undefined
+      });
+    }
+
+    setEskulForm({
+      name: '',
+      category: 'Olahraga & Prestasi',
+      description: '',
+      coach: '',
+      ketua: '',
+      schedule: '',
+      location: '',
+      coverUrl: '',
+      logoUrl: '',
+      tiktokUrl: ''
+    });
+    setIsAddEskulModalOpen(false);
+  };
+
+  const handleSaveTikTok = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedEskulId) return;
+    updateEskul(selectedEskulId, {
+      tiktokUrl: tiktokInput.trim() || undefined
+    });
+    setIsEditingTikTok(false);
+  };
+
+  const handleSendMessage = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedEskulId || (!messageInput.trim() && !messageMediaUrl.trim())) return;
+
+    const senderName = authSession.role !== 'visitor'
+      ? authSession.name || 'Pengguna Terdaftar'
+      : 'Siswa / Pengunjung';
+
+    const senderRole = authSession.role === 'super_admin'
+      ? 'Pembina / Admin'
+      : authSession.role === 'class_admin'
+      ? 'Pengurus'
+      : 'Siswa';
+
+    addEskulMessage(
+      selectedEskulId,
+      messageInput.trim(),
+      senderName,
+      senderRole,
+      messageMediaUrl.trim() || undefined
+    );
+
+    setMessageInput('');
+    setMessageMediaUrl('');
+    setShowAttachMedia(false);
+  };
+
+  const handleAddPhoto = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedEskulId) return;
+
+    // Check if multiMediaList has items or single photoForm.photoUrl is provided
+    const validMediaItems = multiMediaList.filter(item => item.url && item.url.trim());
+    if (validMediaItems.length === 0 && !photoForm.photoUrl.trim()) {
+      showToast('Mohon unggah minimal 1 foto/video terlebih dahulu.', 'warning');
+      return;
+    }
+
+    const uploader = authSession.role !== 'visitor'
+      ? authSession.name || 'Admin / Pengurus'
+      : 'Kontributor Eskul';
+
+    if (validMediaItems.length > 0) {
+      // Batch add
+      const newPhotos = validMediaItems.map((item, idx) => ({
+        title: item.title?.trim() || photoForm.title.trim() || `Dokumentasi Eskul #${idx + 1}`,
+        caption: item.caption?.trim() || photoForm.caption.trim() || '',
+        photoUrl: item.url.trim(),
+        date: photoForm.date.trim(),
+        uploadedBy: uploader
+      }));
+      addEskulPhotosBatch(selectedEskulId, newPhotos);
+    } else {
+      // Single add
+      addEskulPhoto(selectedEskulId, {
+        title: photoForm.title.trim() || 'Dokumentasi Eskul',
+        caption: photoForm.caption.trim(),
+        photoUrl: photoForm.photoUrl.trim(),
+        date: photoForm.date.trim(),
+        uploadedBy: uploader
+      });
+    }
+
+    setPhotoForm({
+      title: '',
+      caption: '',
+      photoUrl: '',
+      date: new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date())
+    });
+    setMultiMediaList([]);
+    setIsAddPhotoModalOpen(false);
+  };
+
+  // Member Handlers
+  const handleOpenAddMember = () => {
+    setEditingMember(null);
+    setMemberForm({
+      name: '',
+      classGrade: 'Kelas 11',
+      role: 'Anggota',
+      photoUrl: '',
+      contact: ''
+    });
+    setIsMemberModalOpen(true);
+  };
+
+  const handleOpenEditMember = (member: EskulMember) => {
+    setEditingMember(member);
+    setMemberForm({
+      name: member.name || '',
+      classGrade: member.classGrade || 'Kelas 11',
+      role: member.role || 'Anggota',
+      photoUrl: member.photoUrl || '',
+      contact: member.contact || ''
+    });
+    setIsMemberModalOpen(true);
+  };
+
+  const handleSaveMember = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedEskulId || !memberForm.name.trim()) return;
+
+    if (editingMember) {
+      updateEskulMember(selectedEskulId, editingMember.id, {
+        name: memberForm.name.trim(),
+        classGrade: memberForm.classGrade.trim(),
+        role: memberForm.role,
+        photoUrl: memberForm.photoUrl.trim() || undefined,
+        contact: memberForm.contact.trim() || undefined
+      });
+      setEditingMember(null);
+    } else {
+      addEskulMember(selectedEskulId, {
+        name: memberForm.name.trim(),
+        classGrade: memberForm.classGrade.trim(),
+        role: memberForm.role,
+        photoUrl: memberForm.photoUrl.trim() || undefined,
+        contact: memberForm.contact.trim()
+      });
+    }
+
+    setMemberForm({
+      name: '',
+      classGrade: 'Kelas 11',
+      role: 'Anggota',
+      photoUrl: '',
+      contact: ''
+    });
+    setIsMemberModalOpen(false);
+  };
+
+  return (
+    <div className="space-y-8 pb-24 text-[#2D2D2A]">
+      {/* 🟢 VIEW 1: DETAIL ESKUL PAGE (If selectedEskul is active) */}
+      {selectedEskul ? (
+        <div className="space-y-6 animate-fadeIn">
+          {/* Back Button & Top Action Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <button
+              onClick={() => setSelectedEskulId(null)}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-[#E0E0D8] rounded-2xl text-xs font-bold text-[#5A5A40] hover:bg-[#F5F5F0] transition-all cursor-pointer shadow-xs"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Kembali ke Direktori Eskul</span>
+            </button>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {/* STATUS KEANGGOTAAN / TOMBOL GABUNG ESKUL */}
+              {isThisEskulAdmin ? (
+                <div className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-amber-50 border border-amber-200 text-amber-800 rounded-2xl text-xs font-bold shadow-xs">
+                  <ShieldCheck className="w-4 h-4 text-amber-600" />
+                  <span>Admin Eskul {selectedEskul.name}</span>
+                </div>
+              ) : isAcceptedMember ? (
+                <div className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl text-xs font-bold shadow-xs">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span>Anggota Resmi Eskul</span>
+                </div>
+              ) : pendingRequest ? (
+                <div className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-amber-50 border border-amber-200 text-amber-800 rounded-2xl text-xs font-bold shadow-xs">
+                  <Clock className="w-4 h-4 text-amber-600 animate-pulse" />
+                  <span>Menunggu Konfirmasi Admin</span>
+                </div>
+              ) : rejectedRequest ? (
+                <div className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-rose-50 border border-rose-200 text-rose-800 rounded-2xl text-xs font-bold shadow-xs">
+                  <XCircle className="w-4 h-4 text-rose-600" />
+                  <span>Permohonan Ditolak (Read-Only)</span>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  id="btn-join-eskul"
+                  onClick={handleOpenJoinModal}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-2xl text-xs font-bold uppercase tracking-wider shadow-sm transition-all cursor-pointer active:scale-95"
+                  title="Ajukan permohonan bergabung ke ekstrakurikuler ini"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  <span>Gabung ke Eskul</span>
+                </button>
+              )}
+
+              {/* 🎵 TOMBOL AKUN TIKTOK ESKUL */}
+              {selectedEskul.tiktokUrl && (
+                <a
+                  id="btn-tiktok-eskul-detail"
+                  href={selectedEskul.tiktokUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-black hover:bg-neutral-900 text-white rounded-2xl text-xs font-bold uppercase tracking-wider shadow-xs transition-all cursor-pointer group border border-neutral-800 active:scale-95"
+                  title={`Kunjungi Akun TikTok Resmi ${selectedEskul.name}`}
+                >
+                  <TikTokIcon className="w-4 h-4 text-white group-hover:scale-110 transition-transform" />
+                  <span>Akun TikTok Eskul</span>
+                  <ExternalLink className="w-3.5 h-3.5 opacity-70" />
+                </a>
+              )}
+
+              {/* Tombol Ubah / Tambah TikTok oleh Admin Kelas & Admin Utama */}
+              {canManageEskul && (
+                <button
+                  type="button"
+                  id="btn-manage-tiktok-eskul"
+                  onClick={() => {
+                    setTiktokInput(selectedEskul.tiktokUrl || '');
+                    setIsEditingTikTok(true);
+                  }}
+                  className={`inline-flex items-center gap-2 px-3.5 py-2.5 rounded-2xl text-xs font-bold uppercase tracking-wider border transition-all cursor-pointer active:scale-95 ${
+                    selectedEskul.tiktokUrl
+                      ? 'bg-white hover:bg-[#F5F5F0] text-[#5A5A40] border-[#E0E0D8]'
+                      : 'bg-black hover:bg-neutral-900 text-white border-neutral-800 shadow-xs'
+                  }`}
+                  title="Ubah tautan akun TikTok eskul ini (Admin Kelas & Admin Utama)"
+                >
+                  <TikTokIcon className={`w-4 h-4 ${selectedEskul.tiktokUrl ? 'text-black' : 'text-white'}`} />
+                  <span>{selectedEskul.tiktokUrl ? 'Ubah TikTok' : '+ Akun TikTok Eskul'}</span>
+                  <Edit3 className="w-3.5 h-3.5 opacity-70" />
+                </button>
+              )}
+
+              {authSession.role === 'super_admin' && (
+                <>
+                  <button
+                    type="button"
+                    id="btn-edit-eskul-detail"
+                    onClick={() => handleOpenEditEskul(selectedEskul)}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#8C4A32] text-white rounded-2xl text-xs font-bold hover:bg-[#723B28] transition-all cursor-pointer shadow-xs"
+                    title="Ubah informasi dan profil eskul ini"
+                  >
+                    <Edit3 className="w-4 h-4" />
+                    <span>Edit Informasi Eskul</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    id="btn-delete-eskul-detail"
+                    onClick={() => handleDeleteEskul(selectedEskul)}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-red-50 text-red-700 border border-red-200 rounded-2xl text-xs font-bold hover:bg-red-100 transition-all cursor-pointer shadow-xs"
+                    title="Hapus Ekstrakurikuler Ini"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span className="hidden sm:inline">Hapus Eskul</span>
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Eskul Header Banner */}
+          <div className="bg-white border border-[#E0E0D8] rounded-[32px] overflow-hidden shadow-sm">
+            {/* Optional Cover: DO NOT SHOW PHOTO IF NOT PROVIDED */}
+            {selectedEskul.coverUrl ? (
+              <div className="relative h-48 sm:h-64 w-full overflow-hidden bg-neutral-900">
+                <img
+                  src={selectedEskul.coverUrl}
+                  alt={selectedEskul.name}
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/25 to-transparent" />
+                <div className="absolute bottom-5 left-6 sm:left-8 text-white space-y-1">
+                  <span className="px-3 py-1 bg-white/20 backdrop-blur-md rounded-full text-[10px] font-bold uppercase tracking-wider">
+                    {selectedEskul.category}
+                  </span>
+                  <h1 className="font-serif text-2xl sm:text-4xl font-bold text-white drop-shadow-md">
+                    {selectedEskul.name}
+                  </h1>
+                </div>
+              </div>
+            ) : (
+              <div className="p-6 sm:p-8 bg-gradient-to-r from-[#5A5A40]/10 via-[#F5F5F0] to-[#E0E0D8]/30 border-b border-[#E0E0D8]">
+                <div className="inline-flex items-center gap-2 px-3 py-1 bg-white text-[#5A5A40] text-xs font-bold uppercase tracking-widest rounded-full border border-[#E0E0D8] mb-2">
+                  <Award className="w-3.5 h-3.5" />
+                  <span>{selectedEskul.category}</span>
+                </div>
+                <h1 className="font-serif text-2xl sm:text-4xl font-bold text-[#2D2D2A]">
+                  {selectedEskul.name}
+                </h1>
+              </div>
+            )}
+
+            {/* Quick Details Bar */}
+            <div className="p-6 sm:p-8 grid grid-cols-2 sm:grid-cols-4 gap-4 bg-white">
+              <div className="space-y-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#8E8E85] block">Pembina / Pelatih</span>
+                <p className="text-xs sm:text-sm font-bold text-[#2D2D2A]">{selectedEskul.coach || '-'}</p>
+              </div>
+              <div className="space-y-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#8E8E85] block">Ketua Eskul</span>
+                <p className="text-xs sm:text-sm font-bold text-[#2D2D2A]">{selectedEskul.ketua || '-'}</p>
+              </div>
+              <div className="space-y-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#8E8E85] block">Jadwal Latihan</span>
+                <p className="text-xs sm:text-sm font-bold text-[#2D2D2A]">{selectedEskul.schedule || '-'}</p>
+              </div>
+              <div className="space-y-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#8E8E85] block">Lokasi Kegiatan</span>
+                <p className="text-xs sm:text-sm font-bold text-[#2D2D2A]">{selectedEskul.location || '-'}</p>
+              </div>
+            </div>
+
+            {/* Tabs Navigation */}
+            <div className="flex border-t border-[#E0E0D8] bg-[#F8F8F5] overflow-x-auto scrollbar-none">
+              <button
+                onClick={() => setActiveTab('chat')}
+                className={`flex-1 min-w-[130px] py-3.5 px-4 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 border-b-2 transition-all cursor-pointer ${
+                  activeTab === 'chat'
+                    ? 'border-[#5A5A40] text-[#5A5A40] bg-white'
+                    : 'border-transparent text-[#8E8E85] hover:text-[#2D2D2A]'
+                }`}
+              >
+                <MessageSquare className="w-4 h-4" />
+                <span>Obrolan ({selectedEskul.messages?.length || 0})</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('gallery')}
+                className={`flex-1 min-w-[130px] py-3.5 px-4 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 border-b-2 transition-all cursor-pointer ${
+                  activeTab === 'gallery'
+                    ? 'border-[#5A5A40] text-[#5A5A40] bg-white'
+                    : 'border-transparent text-[#8E8E85] hover:text-[#2D2D2A]'
+                }`}
+              >
+                <Camera className="w-4 h-4" />
+                <span>Galeri ({selectedEskul.gallery?.length || 0})</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('members')}
+                className={`flex-1 min-w-[130px] py-3.5 px-4 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 border-b-2 transition-all cursor-pointer ${
+                  activeTab === 'members'
+                    ? 'border-[#5A5A40] text-[#5A5A40] bg-white'
+                    : 'border-transparent text-[#8E8E85] hover:text-[#2D2D2A]'
+                }`}
+              >
+                <Users className="w-4 h-4" />
+                <span>Struktur Anggota ({selectedEskul.members?.length || 0})</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('info')}
+                className={`flex-1 min-w-[130px] py-3.5 px-4 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 border-b-2 transition-all cursor-pointer ${
+                  activeTab === 'info'
+                    ? 'border-[#5A5A40] text-[#5A5A40] bg-white'
+                    : 'border-transparent text-[#8E8E85] hover:text-[#2D2D2A]'
+                }`}
+              >
+                <Award className="w-4 h-4" />
+                <span>Profil & Visi</span>
+              </button>
+
+              {/* Tab Permohonan Gabung untuk Admin Eskul & Admin Utama */}
+              {(isThisEskulAdmin || isSuperAdmin) && (
+                <button
+                  onClick={() => setActiveTab('requests')}
+                  className={`flex-1 min-w-[170px] py-3.5 px-4 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 border-b-2 transition-all cursor-pointer ${
+                    activeTab === 'requests'
+                      ? 'border-[#8C4A32] text-[#8C4A32] bg-white'
+                      : 'border-transparent text-[#8E8E85] hover:text-[#2D2D2A]'
+                  }`}
+                >
+                  <UserCheck className="w-4 h-4" />
+                  <span>Permohonan Gabung</span>
+                  {pendingRequestsList.length > 0 && (
+                    <span className="px-2 py-0.5 bg-[#8C4A32] text-white text-[10px] font-bold rounded-full animate-bounce">
+                      {pendingRequestsList.length}
+                    </span>
+                  )}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Tab 1: RUANG OBROLAN SESAMA ANGGOTA ESKUL */}
+          {activeTab === 'chat' && (
+            <div className="bg-white border border-[#E0E0D8] rounded-[32px] p-4 sm:p-6 shadow-sm flex flex-col h-[600px] max-h-[75vh]">
+              {/* Chat Header */}
+              <div className="pb-3 border-b border-[#E0E0D8] flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-[#5A5A40]/10 text-[#5A5A40] flex items-center justify-center">
+                    <MessageSquare className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-serif text-base font-bold text-[#2D2D2A]">
+                      Ruang Obrolan {selectedEskul.name}
+                    </h3>
+                    <p className="text-[11px] text-[#8E8E85]">
+                      Forum diskusi dan koordinasi anggota serta pembina eskul
+                    </p>
+                  </div>
+                </div>
+
+                <span className="text-[11px] font-bold text-[#5A5A40] bg-[#F5F5F0] px-3 py-1 rounded-xl border border-[#E0E0D8]">
+                  {selectedEskul.messages?.length || 0} Pesan
+                </span>
+              </div>
+
+              {/* Chat Message Stream */}
+              <div className="flex-1 overflow-y-auto py-4 space-y-4 pr-1">
+                {(!selectedEskul.messages || selectedEskul.messages.length === 0) ? (
+                  <div className="h-full flex flex-col items-center justify-center text-center p-6 text-[#8E8E85]">
+                    <div className="w-14 h-14 rounded-3xl bg-[#F8F8F5] border border-[#E0E0D8] flex items-center justify-center text-[#5A5A40] mb-3">
+                      <MessageSquare className="w-7 h-7 opacity-60" />
+                    </div>
+                    <p className="font-serif text-base font-bold text-[#2D2D2A]">Belum ada pesan dalam obrolan ini.</p>
+                    <p className="text-xs text-[#8E8E85] mt-1 max-w-xs">
+                      Sapa anggota lain dan mulai obrolan untuk berdiskusi seputar kegiatan {selectedEskul.name}!
+                    </p>
+                  </div>
+                ) : (
+                  (selectedEskul.messages || []).map((msg) => {
+                    const isSuperAdmin = authSession.role === 'super_admin';
+                    const isSender = (authSession.studentId && msg.senderId === authSession.studentId) ||
+                                     (authSession.username && msg.senderId === authSession.username);
+                    const canDelete = isSuperAdmin || isSender;
+                    const isLiked = (msg.likedBy || []).includes(authSession.studentId || authSession.username || 'visitor');
+
+                    return (
+                      <div key={msg.id} className="flex flex-col space-y-1 group">
+                        <div className="flex items-center justify-between text-xs px-1">
+                          <div className="flex items-center gap-1.5 font-bold text-[#2D2D2A]">
+                            <span>{msg.senderName}</span>
+                            {msg.senderRole && (
+                              <span className={`px-2 py-0.5 rounded text-[9px] font-semibold border ${
+                                msg.senderRole.includes('Admin') || msg.senderRole.includes('Pembina')
+                                  ? 'bg-[#8C4A32]/10 text-[#8C4A32] border-[#8C4A32]/20'
+                                  : msg.senderRole.includes('Pengurus')
+                                  ? 'bg-blue-50 text-blue-800 border-blue-200'
+                                  : 'bg-[#F5F5F0] text-[#5A5A40] border-[#E0E0D8]'
+                              }`}>
+                                {msg.senderRole}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-[#8E8E85]">
+                            {new Date(msg.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+
+                        {/* Message Box */}
+                        <div className="bg-[#F8F8F5] border border-[#E0E0D8] rounded-2xl p-3.5 space-y-2.5 max-w-2xl">
+                          {msg.content && (
+                            <p className="text-xs sm:text-sm text-[#2D2D2A] leading-relaxed whitespace-pre-wrap break-words">
+                              {msg.content}
+                            </p>
+                          )}
+
+                          {msg.mediaUrl && (
+                            <div className="rounded-xl overflow-hidden border border-[#E0E0D8] bg-black/5 max-h-72">
+                              <img
+                                src={msg.mediaUrl}
+                                alt="Lampiran Obrolan"
+                                className="w-full h-full object-cover max-h-72"
+                              />
+                            </div>
+                          )}
+
+                          {/* Message Actions */}
+                          <div className="flex items-center justify-between pt-1 text-[11px] border-t border-[#E0E0D8]/60">
+                            <button
+                              type="button"
+                              onClick={() => toggleEskulMessageLike(selectedEskul.id, msg.id)}
+                              className={`flex items-center gap-1 px-2 py-1 rounded-lg transition-colors cursor-pointer ${
+                                isLiked
+                                  ? 'text-rose-600 font-bold bg-rose-50'
+                                  : 'text-[#8E8E85] hover:text-[#5A5A40] hover:bg-white'
+                              }`}
+                            >
+                              <Heart className={`w-3.5 h-3.5 ${isLiked ? 'fill-rose-500 text-rose-500' : ''}`} />
+                              <span>{msg.likes && msg.likes > 0 ? `${msg.likes} Suka` : 'Suka'}</span>
+                            </button>
+
+                            {canDelete && (
+                              <button
+                                type="button"
+                                onClick={() => deleteEskulMessage(selectedEskul.id, msg.id)}
+                                className="text-[#8E8E85] hover:text-red-600 p-1 rounded-md transition-colors cursor-pointer"
+                                title="Hapus Pesan"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+                <div ref={chatEndRef} />
+              </div>
+
+              {/* Chat Input Area / Status Banner */}
+              {isAcceptedMember ? (
+                <form onSubmit={handleSendMessage} className="pt-3 border-t border-[#E0E0D8] space-y-2">
+                  {showAttachMedia && (
+                    <div className="p-3 bg-[#F8F8F5] rounded-2xl border border-[#E0E0D8] space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-[#5A5A40]">Lampirkan Foto</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowAttachMedia(false);
+                            setMessageMediaUrl('');
+                          }}
+                          className="text-[#8E8E85] hover:text-[#2D2D2A]"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <MediaUploadField
+                        mediaType="image"
+                        value={messageMediaUrl}
+                        onChange={url => setMessageMediaUrl(url)}
+                        helperText="Unggah gambar untuk dikirim ke forum diskusi."
+                      />
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowAttachMedia(!showAttachMedia)}
+                      className={`p-2.5 rounded-xl border transition-colors cursor-pointer ${
+                        showAttachMedia
+                          ? 'bg-[#5A5A40] text-white border-[#5A5A40]'
+                          : 'bg-[#F5F5F0] text-[#5A5A40] border-[#E0E0D8] hover:bg-[#EBEBE5]'
+                      }`}
+                      title="Lampirkan Gambar"
+                    >
+                      <ImageIcon className="w-4 h-4" />
+                    </button>
+
+                    <input
+                      type="text"
+                      value={messageInput}
+                      onChange={e => setMessageInput(e.target.value)}
+                      placeholder={`Tulis pesan di ${selectedEskul.name}...`}
+                      className="flex-1 px-4 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-xs sm:text-sm text-[#2D2D2A] focus:outline-none focus:border-[#5A5A40]"
+                    />
+
+                    <button
+                      type="submit"
+                      className="px-5 py-2.5 bg-[#5A5A40] hover:bg-[#484833] text-white rounded-xl font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-sm transition-all cursor-pointer active:scale-95"
+                    >
+                      <span>Kirim</span>
+                      <Send className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </form>
+              ) : pendingRequest ? (
+                <div className="pt-3 border-t border-[#E0E0D8]">
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-start sm:items-center gap-3 text-xs text-amber-900">
+                    <Clock className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5 sm:mt-0 animate-pulse" />
+                    <div className="space-y-0.5">
+                      <p className="font-bold">Permohonan Gabung Menunggu Konfirmasi</p>
+                      <p className="text-amber-700 text-[11px] leading-relaxed">
+                        Permohonan Anda untuk bergabung ke <strong>{selectedEskul.name}</strong> sedang ditinjau oleh Admin Eskul. Anda akan dapat mengirim pesan obrolan setelah disetujui.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : rejectedRequest ? (
+                <div className="pt-3 border-t border-[#E0E0D8]">
+                  <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-start sm:items-center gap-3 text-xs text-rose-900">
+                    <XCircle className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5 sm:mt-0" />
+                    <div className="space-y-0.5">
+                      <p className="font-bold">Mode Lihat Saja (Read-Only)</p>
+                      <p className="text-rose-700 text-[11px] leading-relaxed">
+                        Pendaftaran Anda ke eskul ini ditolak oleh Admin Eskul. Anda dapat melihat informasi dan riwayat kegiatan eskul, namun tidak dapat mengirim pesan obrolan.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="pt-3 border-t border-[#E0E0D8]">
+                  <div className="p-4 bg-[#F8F8F5] border border-[#E0E0D8] rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-2.5 text-[#5A5A40]">
+                      <Lock className="w-4 h-4 text-[#5A5A40] flex-shrink-0" />
+                      <span>Bergabunglah ke <strong>{selectedEskul.name}</strong> untuk berpartisipasi dan mengirim pesan dalam forum diskusi ini.</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleOpenJoinModal}
+                      className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl font-bold uppercase tracking-wider text-xs shadow-xs transition-all cursor-pointer whitespace-nowrap active:scale-95 flex items-center gap-1.5"
+                    >
+                      <UserPlus className="w-3.5 h-3.5" />
+                      <span>Ajukan Gabung Eskul</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Tab 2: GALERI FOTO & DOKUMENTASI ESKUL */}
+          {activeTab === 'gallery' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-serif text-xl font-bold text-[#2D2D2A]">Dokumentasi & Galeri Kegiatan</h3>
+                  <p className="text-xs text-[#8E8E85]">Koleksi momen, latihan rutin, dan torehan prestasi {selectedEskul.name}</p>
+                </div>
+
+                <button
+                  onClick={() => setIsAddPhotoModalOpen(true)}
+                  className="px-4 py-2.5 bg-[#5A5A40] hover:bg-[#484833] text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 shadow-sm transition-all cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Unggah Foto</span>
+                </button>
+              </div>
+
+              {(!selectedEskul.gallery || selectedEskul.gallery.length === 0) ? (
+                <div className="bg-white border border-[#E0E0D8] rounded-[32px] p-12 text-center text-[#8E8E85]">
+                  <Camera className="w-12 h-12 mx-auto text-[#E0E0D8] mb-3" />
+                  <p className="font-serif text-base font-bold text-[#2D2D2A]">Belum ada foto kegiatan.</p>
+                  <p className="text-xs text-[#8E8E85] mt-1">Jadilah yang pertama mengunggah foto dokumentasi eskul ini!</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {(selectedEskul.gallery || []).map(photo => (
+                    <div
+                      key={photo.id}
+                      className="bg-white border border-[#E0E0D8] rounded-[28px] overflow-hidden shadow-xs hover:shadow-md transition-all flex flex-col justify-between"
+                    >
+                      <div className="aspect-[4/3] w-full overflow-hidden bg-neutral-900">
+                        <img
+                          src={photo.photoUrl || photo.imageUrl || ''}
+                          alt={photo.title}
+                          className="w-full h-full object-cover hover:scale-105 transition-transform duration-500"
+                        />
+                      </div>
+
+                      <div className="p-5 space-y-3 flex-1 flex flex-col justify-between">
+                        <div>
+                          <div className="flex items-center justify-between text-[11px] text-[#8E8E85] mb-1">
+                            <span>{photo.date || 'Kegiatan Eskul'}</span>
+                            <span className="font-medium">Oleh: {photo.uploadedBy || 'Kontributor'}</span>
+                          </div>
+                          <h4 className="font-bold text-sm text-[#2D2D2A]">{photo.title}</h4>
+                          {(photo.caption || photo.description) && (
+                            <p className="text-xs text-[#8E8E85] mt-1 line-clamp-3 leading-relaxed">
+                              {photo.caption || photo.description}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Social Interactions */}
+                        <SocialActions
+                          itemId={photo.id}
+                          itemTitle={photo.title}
+                          likes={photo.likes || 0}
+                          likedBy={photo.likedBy || []}
+                          comments={photo.comments || []}
+                          shares={photo.shares || 0}
+                          onToggleLike={() => toggleEskulPhotoLike(selectedEskul.id, photo.id)}
+                          onAddComment={(content, author) => addEskulPhotoComment(selectedEskul.id, photo.id, content, author)}
+                          onShare={() => incrementEskulPhotoShare(selectedEskul.id, photo.id)}
+                        />
+
+                        {authSession.role === 'super_admin' && (
+                          <div className="pt-2 border-t border-[#E0E0D8] flex justify-end">
+                            <button
+                              onClick={() => {
+                                requestDeleteConfirm({
+                                  itemName: `Foto "${photo.title}"`,
+                                  message: `Hapus foto "${photo.title}" dari galeri eskul?`,
+                                  onConfirm: () => deleteEskulPhoto(selectedEskul.id, photo.id)
+                                });
+                              }}
+                              className="text-xs text-red-600 hover:text-red-700 font-bold p-1 rounded transition-colors cursor-pointer"
+                            >
+                              Hapus Foto Ini
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Tab 3: DAFTAR ANGGOTA & PENGURUS */}
+          {activeTab === 'members' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-serif text-xl font-bold text-[#2D2D2A]">Struktur Pengurus & Anggota</h3>
+                  <p className="text-xs text-[#8E8E85]">Daftar siswa yang aktif tergabung dalam {selectedEskul.name}</p>
+                </div>
+
+                <button
+                  onClick={handleOpenAddMember}
+                  className="px-4 py-2.5 bg-[#5A5A40] hover:bg-[#484833] text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 shadow-sm transition-all cursor-pointer"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  <span>Tambah Anggota</span>
+                </button>
+              </div>
+
+              {(!selectedEskul.members || selectedEskul.members.length === 0) ? (
+                <div className="bg-white border border-[#E0E0D8] rounded-[32px] p-12 text-center text-[#8E8E85]">
+                  <Users className="w-12 h-12 mx-auto text-[#E0E0D8] mb-3" />
+                  <p className="font-serif text-base font-bold text-[#2D2D2A]">Belum ada anggota terdaftar.</p>
+                  <p className="text-xs text-[#8E8E85] mt-1">Tambahkan data pengurus dan anggota eskul.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
+                  {(selectedEskul.members || []).map(member => (
+                    <div
+                      key={member.id}
+                      className="bg-white border border-[#E0E0D8] rounded-[24px] p-5 shadow-xs hover:shadow-md transition-all flex flex-col items-center text-center space-y-3 relative group"
+                    >
+                      {/* Member Photo */}
+                      {member.photoUrl ? (
+                        <div className="w-20 h-20 rounded-2xl overflow-hidden border-2 border-[#E0E0D8] shadow-xs">
+                          <img
+                            src={member.photoUrl}
+                            alt={member.name}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      ) : (
+                        <div className="w-20 h-20 rounded-2xl bg-[#5A5A40]/10 border border-[#E0E0D8] flex items-center justify-center font-serif text-xl font-bold text-[#5A5A40]">
+                          {member.name.slice(0, 2).toUpperCase()}
+                        </div>
+                      )}
+
+                      <div className="space-y-1 w-full">
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border inline-block ${
+                          member.role === 'Ketua' || member.role === 'Wakil Ketua'
+                            ? 'bg-amber-50 text-amber-800 border-amber-200'
+                            : member.role === 'Sekretaris' || member.role === 'Bendahara'
+                            ? 'bg-blue-50 text-blue-800 border-blue-200'
+                            : 'bg-[#F5F5F0] text-[#5A5A40] border-[#E0E0D8]'
+                        }`}>
+                          {member.role}
+                        </span>
+                        <h4 className="font-bold text-sm text-[#2D2D2A] line-clamp-1">{member.name}</h4>
+                        <p className="text-xs text-[#8E8E85]">{member.classGrade}</p>
+                        {member.contact && (
+                          <p className="text-[11px] text-[#5A5A40] font-medium truncate">{member.contact}</p>
+                        )}
+                      </div>
+
+                      {authSession.role === 'super_admin' && (
+                        <div className="flex items-center gap-2 pt-2 border-t border-[#E0E0D8] w-full justify-center">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditMember(member)}
+                            className="p-1.5 text-xs text-[#5A5A40] hover:bg-[#F5F5F0] rounded-lg transition-colors cursor-pointer"
+                            title="Edit Anggota"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              requestDeleteConfirm({
+                                itemName: `Anggota ${member.name}`,
+                                message: `Hapus ${member.name} dari daftar anggota eskul?`,
+                                onConfirm: () => deleteEskulMember(selectedEskul.id, member.id)
+                              });
+                            }}
+                            className="p-1.5 text-xs text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                            title="Hapus Anggota"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Tab 4: INFORMASI, DESKRIPSI & VISI */}
+          {activeTab === 'info' && (
+            <div className="bg-white border border-[#E0E0D8] rounded-[32px] p-6 sm:p-8 space-y-6 shadow-sm">
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-[#5A5A40] block mb-1">
+                  Profil & Deskripsi Kegiatan
+                </span>
+                <h3 className="font-serif text-2xl font-bold text-[#2D2D2A]">
+                  Tentang {selectedEskul.name}
+                </h3>
+              </div>
+
+              <p className="text-sm sm:text-base text-[#2D2D2A] leading-relaxed whitespace-pre-wrap">
+                {selectedEskul.description || 'Belum ada penjelasan detail mengenai ekstrakurikuler ini.'}
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-[#E0E0D8]">
+                <div className="p-4 bg-[#F8F8F5] rounded-2xl border border-[#E0E0D8] space-y-2">
+                  <div className="flex items-center gap-2 text-xs font-bold text-[#5A5A40] uppercase">
+                    <Calendar className="w-4 h-4" />
+                    <span>Jadwal Rutin</span>
+                  </div>
+                  <p className="text-sm font-semibold text-[#2D2D2A]">{selectedEskul.schedule || 'Setiap Minggu'}</p>
+                  <p className="text-xs text-[#8E8E85]">Lokasi: {selectedEskul.location || 'Area Sekolah'}</p>
+                </div>
+
+                <div className="p-4 bg-[#F8F8F5] rounded-2xl border border-[#E0E0D8] space-y-2">
+                  <div className="flex items-center gap-2 text-xs font-bold text-[#5A5A40] uppercase">
+                    <Award className="w-4 h-4" />
+                    <span>Prestasi & Pembinaan</span>
+                  </div>
+                  <p className="text-sm font-semibold text-[#2D2D2A]">Dibimbing oleh {selectedEskul.coach || '-'}</p>
+                  <p className="text-xs text-[#8E8E85]">Koordinasi Ketua: {selectedEskul.ketua || '-'}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Tab 5: PERMOHONAN GABUNG KE ESKUL (Admin Eskul & Super Admin) */}
+          {activeTab === 'requests' && (isThisEskulAdmin || isSuperAdmin) && (
+            <div className="bg-white border border-[#E0E0D8] rounded-[32px] p-6 sm:p-8 space-y-6 shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#E0E0D8]">
+                <div>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-[#8C4A32] block mb-1">
+                    Panel Verifikasi Anggota
+                  </span>
+                  <h3 className="font-serif text-2xl font-bold text-[#2D2D2A]">
+                    Permohonan Bergabung ke {selectedEskul.name}
+                  </h3>
+                  <p className="text-xs text-[#8E8E85] mt-1">
+                    Siswa yang diterima akan langsung terdaftar di anggota eskul, memiliki akses obrolan, dan namanya otomatis masuk ke daftar data OSIS/Eskul sekolah.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="px-3.5 py-1.5 bg-amber-50 text-amber-800 border border-amber-200 rounded-xl text-xs font-bold">
+                    {pendingRequestsList.length} Menunggu Persetujuan
+                  </span>
+                </div>
+              </div>
+
+              {/* Section 1: Menunggu Persetujuan */}
+              <div className="space-y-4">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-[#5A5A40] flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-amber-600" />
+                  <span>Permohonan Menunggu Konfirmasi ({pendingRequestsList.length})</span>
+                </h4>
+
+                {pendingRequestsList.length === 0 ? (
+                  <div className="p-8 bg-[#F8F8F5] border border-dashed border-[#E0E0D8] rounded-2xl text-center text-xs text-[#8E8E85]">
+                    <CheckCircle2 className="w-8 h-8 mx-auto text-emerald-600 mb-2 opacity-80" />
+                    <p className="font-bold text-[#2D2D2A]">Semua Permohonan Telah Diproses</p>
+                    <p className="text-[#8E8E85] mt-0.5">Tidak ada siswa yang sedang menunggu persetujuan bergabung saat ini.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {pendingRequestsList.map(req => (
+                      <div
+                        key={req.id}
+                        className="p-5 bg-[#FAF8F5] border-2 border-amber-200/80 rounded-2xl space-y-4 shadow-xs hover:shadow-md transition-all"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 rounded-2xl bg-amber-100 border border-amber-300 text-amber-900 flex items-center justify-center font-serif text-base font-bold">
+                              {req.studentName.slice(0, 2).toUpperCase()}
+                            </div>
+                            <div>
+                              <h5 className="font-bold text-sm text-[#2D2D2A]">{req.studentName}</h5>
+                              <p className="text-xs text-[#8E8E85]">{req.classGrade || 'Siswa Sekolah'}</p>
+                              {req.nis && <p className="text-[11px] text-[#5A5A40] font-mono">NIS: {req.nis}</p>}
+                            </div>
+                          </div>
+
+                          <span className="px-2.5 py-1 bg-amber-100 text-amber-800 text-[10px] font-bold rounded-lg uppercase tracking-wider">
+                            Pending
+                          </span>
+                        </div>
+
+                        {req.reason && (
+                          <div className="p-3 bg-white border border-[#E0E0D8] rounded-xl text-xs space-y-1">
+                            <span className="text-[10px] font-bold text-[#8E8E85] uppercase block">Alasan / Motivasi:</span>
+                            <p className="text-[#2D2D2A] italic">"{req.reason}"</p>
+                          </div>
+                        )}
+
+                        <div className="flex items-center justify-between text-[11px] text-[#8E8E85] pt-1">
+                          <span>{req.contact ? `Kontak: ${req.contact}` : 'Kontak tidak dicantumkan'}</span>
+                          <span>{new Date(req.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                        </div>
+
+                        {/* Action Buttons: TERIMA / TOLAK */}
+                        <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#E0E0D8]">
+                          <button
+                            type="button"
+                            onClick={() => handleReviewRequest(req.id, 'reject')}
+                            className="py-2.5 px-3 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-95"
+                          >
+                            <XCircle className="w-4 h-4" />
+                            <span>Tolak</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleReviewRequest(req.id, 'accept')}
+                            className="py-2.5 px-3 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer active:scale-95"
+                          >
+                            <CheckCircle2 className="w-4 h-4" />
+                            <span>Terima & Roster OSIS</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Section 2: Riwayat Permohonan */}
+              {allRequestsList.filter(r => r.status !== 'pending').length > 0 && (
+                <div className="space-y-3 pt-6 border-t border-[#E0E0D8]">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-[#8E8E85]">
+                    Riwayat Permohonan Sebelumnya ({allRequestsList.filter(r => r.status !== 'pending').length})
+                  </h4>
+
+                  <div className="divide-y divide-[#E0E0D8] border border-[#E0E0D8] rounded-2xl overflow-hidden bg-[#F8F8F5]">
+                    {allRequestsList.filter(r => r.status !== 'pending').map(req => (
+                      <div key={req.id} className="p-4 flex items-center justify-between gap-4 text-xs">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs ${
+                            req.status === 'accepted'
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                              : 'bg-rose-100 text-rose-800 border border-rose-300'
+                          }`}>
+                            {req.status === 'accepted' ? '✓' : '✕'}
+                          </div>
+                          <div>
+                            <strong className="text-[#2D2D2A]">{req.studentName}</strong> ({req.classGrade})
+                            {req.reason && <p className="text-[11px] text-[#8E8E85] truncate max-w-sm">"{req.reason}"</p>}
+                          </div>
+                        </div>
+
+                        <div className="text-right flex items-center gap-2">
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${
+                            req.status === 'accepted'
+                              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                              : 'bg-rose-50 text-rose-800 border-rose-200'
+                          }`}>
+                            {req.status === 'accepted' ? 'Diterima' : 'Ditolak (Read-Only)'}
+                          </span>
+                          <span className="text-[10px] text-[#8E8E85] hidden sm:inline">
+                            {new Date(req.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      ) : (
+        /* 🟢 VIEW 2: DIREKTORI SELURUH ESKUL (When no single Eskul is selected) */
+        <div className="space-y-8 animate-fadeIn">
+          {/* Header Banner */}
+          <div className="bg-white border border-[#E0E0D8] rounded-[32px] p-6 sm:p-8 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-2 px-3 py-1 bg-[#F5F5F0] text-[#5A5A40] text-xs font-bold uppercase tracking-widest rounded-full border border-[#E0E0D8]">
+                <Award className="w-3.5 h-3.5 text-[#5A5A40]" />
+                <span>Ekstrakurikuler & Pengembangan Bakat Siswa</span>
+              </div>
+              <h2 className="font-serif text-2xl sm:text-3xl font-bold text-[#2D2D2A] tracking-tight">
+                Direktori Ekstrakurikuler (Eskul)
+              </h2>
+              <p className="text-[#8E8E85] text-sm max-w-xl">
+                Jelajahi berbagai kegiatan ekstrakurikuler, lihat galeri prestasi, ruang obrolan sesama siswa, dan jadwal latihan mingguan.
+              </p>
+            </div>
+
+            {authSession.role === 'super_admin' && (
+              <button
+                type="button"
+                id="btn-add-eskul"
+                onClick={handleOpenAddEskul}
+                className="px-5 py-3 rounded-2xl bg-[#5A5A40] hover:bg-[#484833] text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer flex-shrink-0 active:scale-95"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Tambah Eskul Baru</span>
+              </button>
+            )}
+          </div>
+
+          {/* Search & Filter */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="relative w-full sm:w-80">
+              <Search className="w-4 h-4 absolute left-3.5 top-3 text-[#8E8E85]" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                placeholder="Cari nama eskul / pembina..."
+                className="w-full pl-10 pr-4 py-2.5 bg-white border border-[#E0E0D8] rounded-2xl text-sm text-[#2D2D2A] placeholder-[#8E8E85] focus:outline-none focus:border-[#5A5A40]"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0 scrollbar-none">
+              {categories.map(cat => (
+                <button
+                  key={cat}
+                  onClick={() => setSelectedCategory(cat)}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                    selectedCategory === cat
+                      ? 'bg-[#5A5A40] text-white shadow-sm'
+                      : 'bg-white text-[#8E8E85] hover:text-[#2D2D2A] border border-[#E0E0D8]'
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Grid of Eskul Cards */}
+          {filteredEskuls.length === 0 ? (
+            <div className="bg-white border border-[#E0E0D8] rounded-[32px] p-12 text-center text-[#8E8E85]">
+              <Award className="w-12 h-12 mx-auto text-[#8E8E85] mb-3" />
+              <p className="font-serif text-base font-bold text-[#2D2D2A]">Tidak ada eskul yang sesuai pencarian.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-7">
+              {filteredEskuls.map((eskul, idx) => {
+                const memberCount = eskul.members?.length || 0;
+                const messageCount = eskul.messages?.length || 0;
+
+                return (
+                  <ScrollEmboss key={eskul.id} delay={idx * 50} interactiveHover className="h-full">
+                    <div
+                      className="h-full bg-white border border-[#E0E0D8] rounded-[28px] overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col justify-between group relative"
+                    >
+                      <div>
+                        {/* Optional Cover Image: JANGAN TAMPILKAN JIKA TIDAK DITAMBAHKAN */}
+                        {eskul.coverUrl ? (
+                          <div className="relative aspect-[16/9] w-full overflow-hidden bg-neutral-900">
+                            <img
+                              src={eskul.coverUrl}
+                              alt={eskul.name}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                              loading="lazy"
+                            />
+                            <div className="absolute top-3 left-3">
+                              <span className="px-3 py-1 bg-black/60 backdrop-blur-md text-white text-[10px] font-bold uppercase rounded-full">
+                                {eskul.category}
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="p-6 bg-[#F8F8F5] border-b border-[#E0E0D8] flex items-center justify-between">
+                            <span className="px-3 py-1 bg-[#5A5A40]/10 text-[#5A5A40] text-[10px] font-bold uppercase rounded-full border border-[#E0E0D8]">
+                              {eskul.category}
+                            </span>
+                            <Award className="w-5 h-5 text-[#5A5A40]" />
+                          </div>
+                        )}
+
+                        <div className="p-6 space-y-4">
+                          <div>
+                            <h3 className="font-serif text-2xl font-bold text-[#2D2D2A] group-hover:text-[#5A5A40] transition-colors tracking-tight">
+                              {eskul.name}
+                            </h3>
+                            <p className="text-xs text-[#8E8E85] mt-1 line-clamp-2 leading-relaxed">
+                              {eskul.description || 'Ekstrakurikuler unggulan pengembangan minat dan bakat siswa.'}
+                            </p>
+                          </div>
+
+                          <div className="bg-[#F8F8F5] p-3.5 rounded-2xl border border-[#E0E0D8] space-y-1 text-xs">
+                            <div className="text-[#8E8E85]">
+                              <span>Pembina: </span>
+                              <strong className="text-[#2D2D2A]">{eskul.coach || '-'}</strong>
+                            </div>
+                            <div className="text-[#8E8E85]">
+                              <span>Jadwal: </span>
+                              <strong className="text-[#2D2D2A]">{eskul.schedule || '-'}</strong>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2 text-center text-xs">
+                            <div className="p-2.5 bg-[#F5F5F0] rounded-xl border border-[#E0E0D8]">
+                              <span className="text-[10px] text-[#8E8E85] block uppercase font-bold">Anggota</span>
+                              <strong className="font-serif text-sm font-bold text-[#2D2D2A]">{memberCount} Siswa</strong>
+                            </div>
+                            <div className="p-2.5 bg-[#F5F5F0] rounded-xl border border-[#E0E0D8]">
+                              <span className="text-[10px] text-[#8E8E85] block uppercase font-bold">Obrolan</span>
+                              <strong className="font-serif text-sm font-bold text-[#5A5A40]">{messageCount} Pesan</strong>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="p-6 pt-0 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => openEskul(eskul.id)}
+                            className="flex-1 py-2.5 px-4 bg-[#5A5A40] hover:bg-[#484833] text-white font-bold text-xs uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 shadow-sm cursor-pointer transition-all active:scale-95"
+                          >
+                            <span>Masuk Halaman Eskul</span>
+                            <ChevronRight className="w-4 h-4" />
+                          </button>
+
+                          {eskul.tiktokUrl && (
+                            <a
+                              href={eskul.tiktokUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-2.5 rounded-xl bg-black hover:bg-neutral-900 text-white cursor-pointer shadow-xs transition-all active:scale-95 flex items-center justify-center"
+                              title={`Buka Akun TikTok ${eskul.name}`}
+                              onClick={e => e.stopPropagation()}
+                            >
+                              <TikTokIcon className="w-4 h-4 text-white" />
+                            </a>
+                          )}
+                        </div>
+
+                        {authSession.role === 'super_admin' && (
+                          <div className="flex items-center justify-end gap-2 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditEskul(eskul)}
+                              className="px-3 py-1.5 text-xs font-bold text-[#5A5A40] hover:bg-[#F5F5F0] rounded-lg transition-colors cursor-pointer flex items-center gap-1 border border-[#E0E0D8]"
+                              title="Ubah Eskul"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                              <span>Ubah</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteEskul(eskul)}
+                              className="px-3 py-1.5 text-xs font-bold text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer flex items-center gap-1 border border-red-200"
+                              title="Hapus Eskul"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>Hapus</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </ScrollEmboss>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 🔹 MODAL 1: TAMBAH / UBAH ESKUL (Selalu aktif di root component) */}
+      {isAddEskulModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fadeIn">
+          <div className="relative w-full max-w-xl bg-white border border-[#E0E0D8] rounded-[32px] shadow-2xl p-6 sm:p-8 max-h-[90vh] overflow-y-auto text-[#2D2D2A]">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E0E0D8] mb-4">
+              <div className="flex items-center gap-2">
+                <Award className="w-5 h-5 text-[#5A5A40]" />
+                <h3 className="font-serif text-xl font-bold text-[#5A5A40]">
+                  {editingEskul ? 'Edit Informasi Ekstrakurikuler' : 'Tambah Ekstrakurikuler Baru'}
+                </h3>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setIsAddEskulModalOpen(false)} 
+                className="text-[#8E8E85] hover:text-[#2D2D2A] p-1.5 rounded-xl cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEskul} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Nama Eskul *</label>
+                  <input
+                    type="text"
+                    required
+                    value={eskulForm.name}
+                    onChange={e => setEskulForm({ ...eskulForm, name: e.target.value })}
+                    placeholder="Contoh: Robotik & Coding"
+                    className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-sm focus:outline-none focus:border-[#5A5A40]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Kategori Eskul *</label>
+                  <select
+                    value={eskulForm.category}
+                    onChange={e => setEskulForm({ ...eskulForm, category: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-sm focus:outline-none focus:border-[#5A5A40]"
+                  >
+                    <option value="Kepemimpinan & Bela Negara">Kepemimpinan & Bela Negara</option>
+                    <option value="Olahraga & Prestasi">Olahraga & Prestasi</option>
+                    <option value="Seni, Budaya & Keagamaan">Seni, Budaya & Keagamaan</option>
+                    <option value="Sains, Riset & Teknologi">Sains, Riset & Teknologi</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Deskripsi & Visi</label>
+                <textarea
+                  rows={3}
+                  value={eskulForm.description}
+                  onChange={e => setEskulForm({ ...eskulForm, description: e.target.value })}
+                  placeholder="Jelaskan tujuan dan kegiatan eskul..."
+                  className="w-full px-3.5 py-2 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-sm focus:outline-none focus:border-[#5A5A40]"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Pembina / Pelatih</label>
+                  <input
+                    type="text"
+                    value={eskulForm.coach}
+                    onChange={e => setEskulForm({ ...eskulForm, coach: e.target.value })}
+                    placeholder="Nama Pembina"
+                    className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-sm focus:outline-none focus:border-[#5A5A40]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Ketua Eskul</label>
+                  <input
+                    type="text"
+                    value={eskulForm.ketua}
+                    onChange={e => setEskulForm({ ...eskulForm, ketua: e.target.value })}
+                    placeholder="Nama Ketua"
+                    className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-sm focus:outline-none focus:border-[#5A5A40]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Jadwal Latihan</label>
+                  <input
+                    type="text"
+                    value={eskulForm.schedule}
+                    onChange={e => setEskulForm({ ...eskulForm, schedule: e.target.value })}
+                    placeholder="Contoh: Rabu & Jumat, 15:30 WIB"
+                    className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-sm focus:outline-none focus:border-[#5A5A40]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Lokasi Latihan</label>
+                  <input
+                    type="text"
+                    value={eskulForm.location}
+                    onChange={e => setEskulForm({ ...eskulForm, location: e.target.value })}
+                    placeholder="Contoh: Lab Komputer 2"
+                    className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-sm focus:outline-none focus:border-[#5A5A40]"
+                  />
+                </div>
+              </div>
+
+              {/* Optional Cover Upload */}
+              <MediaUploadField
+                label="Unggah Sampul Eskul (Opsional)"
+                mediaType="image"
+                value={eskulForm.coverUrl}
+                onChange={url => setEskulForm({ ...eskulForm, coverUrl: url })}
+                helperText="Upload foto sampul (opsional). Jika tidak ditambahkan, sampul tidak akan ditampilkan."
+              />
+
+              {/* Tautan Akun TikTok Eskul */}
+              <div className="p-4 bg-[#F8F8F5] rounded-2xl border border-[#E0E0D8] space-y-2">
+                <label className="block text-xs font-bold text-[#2D2D2A] flex items-center gap-1.5">
+                  <TikTokIcon className="w-4 h-4 text-black" />
+                  <span>Tautan Akun TikTok Eskul (Opsional)</span>
+                </label>
+                <input
+                  type="url"
+                  value={eskulForm.tiktokUrl}
+                  onChange={e => setEskulForm({ ...eskulForm, tiktokUrl: e.target.value })}
+                  placeholder="https://www.tiktok.com/@eskul_pramuka"
+                  className="w-full px-3.5 py-2 bg-white border border-[#E0E0D8] rounded-xl text-xs text-[#2D2D2A] focus:outline-none focus:border-[#5A5A40]"
+                />
+                <p className="text-[11px] text-[#8E8E85]">
+                  Tautan akun TikTok ini dapat diubah sewaktu-waktu oleh Admin Kelas dan Admin Utama.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#E0E0D8]">
+                <button
+                  type="button"
+                  onClick={() => setIsAddEskulModalOpen(false)}
+                  className="px-4 py-2 bg-[#E0E0D8] hover:bg-[#D0D0C8] text-[#2D2D2A] text-xs font-bold rounded-xl cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 bg-[#5A5A40] hover:bg-[#484833] text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-md cursor-pointer"
+                >
+                  <Save className="w-4 h-4 inline mr-1.5" />
+                  <span>{editingEskul ? 'SIMPAN PERUBAHAN' : 'TAMBAH ESKUL'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 🔹 MODAL 2: UPLOAD FOTO/VIDEO KEGIATAN ESKUL (MULTI UPLOAD DUKUNGAN ADMIN UTAMA & ADMIN KELAS) */}
+      {isAddPhotoModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fadeIn">
+          <div className="relative w-full max-w-xl bg-white border border-[#E0E0D8] rounded-[32px] shadow-2xl p-6 max-h-[90vh] overflow-y-auto text-[#2D2D2A]">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E0E0D8] mb-4">
+              <div>
+                <h3 className="font-serif text-lg font-bold text-[#5A5A40]">Unggah Foto & Video Kegiatan Eskul</h3>
+                <p className="text-xs text-[#8E8E85]">Admin Utama & Pengurus dapat mengunggah beberapa foto atau video sekaligus.</p>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setIsAddPhotoModalOpen(false)} 
+                className="text-[#8E8E85] hover:text-[#2D2D2A] p-1.5 rounded-xl cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddPhoto} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Judul Utama / Momen (Opsional)</label>
+                <input
+                  type="text"
+                  value={photoForm.title}
+                  onChange={e => setPhotoForm({ ...photoForm, title: e.target.value })}
+                  placeholder="Contoh: Latihan Rutin & Persiapan Lomba"
+                  className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-sm focus:outline-none focus:border-[#5A5A40]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Keterangan / Cerita (Opsional)</label>
+                <textarea
+                  rows={2}
+                  value={photoForm.caption}
+                  onChange={e => setPhotoForm({ ...photoForm, caption: e.target.value })}
+                  placeholder="Ceritakan momen ini..."
+                  className="w-full px-3.5 py-2 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-sm focus:outline-none focus:border-[#5A5A40]"
+                />
+              </div>
+
+              {/* Multi Media Upload Field */}
+              <MultiMediaUploadField
+                label="Unggah File Foto / Video Kegiatan (Bisa Beberapa Sekaligus)"
+                items={multiMediaList}
+                onChange={setMultiMediaList}
+                helperText="Pilih beberapa file foto/video dari perangkat atau masukkan URL. Setiap file dapat diberi judul dan keterangan terpisah."
+              />
+
+              {multiMediaList.length === 0 && (
+                <div className="pt-1">
+                  <span className="text-[11px] text-[#8E8E85] block mb-2">Atau unggah 1 foto langsung:</span>
+                  <MediaUploadField
+                    label="Pilih Foto Tunggal"
+                    mediaType="image"
+                    value={photoForm.photoUrl}
+                    onChange={url => setPhotoForm({ ...photoForm, photoUrl: url })}
+                    helperText="Upload foto dengan format JPG, PNG, atau WEBP."
+                  />
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#E0E0D8]">
+                <button
+                  type="button"
+                  onClick={() => setIsAddPhotoModalOpen(false)}
+                  className="px-4 py-2 bg-[#E0E0D8] hover:bg-[#D0D0C8] text-xs font-bold rounded-xl cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 bg-[#5A5A40] hover:bg-[#484833] text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-md cursor-pointer flex items-center gap-2"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>
+                    {multiMediaList.filter(m => m.url).length > 1
+                      ? `Simpan ${multiMediaList.filter(m => m.url).length} Media`
+                      : 'Simpan Foto'}
+                  </span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 🔹 MODAL 3: TAMBAH / EDIT ANGGOTA ESKUL */}
+      {isMemberModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fadeIn">
+          <div className="relative w-full max-w-lg bg-white border border-[#E0E0D8] rounded-[32px] shadow-2xl p-6 max-h-[90vh] overflow-y-auto text-[#2D2D2A]">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E0E0D8] mb-4">
+              <h3 className="font-serif text-lg font-bold text-[#5A5A40]">
+                {editingMember ? 'Ubah Data Anggota / Pengurus' : 'Tambah Anggota / Pengurus Eskul'}
+              </h3>
+              <button 
+                type="button" 
+                onClick={() => setIsMemberModalOpen(false)} 
+                className="text-[#8E8E85] hover:text-[#2D2D2A] p-1.5 rounded-xl cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveMember} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Nama Lengkap Siswa *</label>
+                <input
+                  type="text"
+                  required
+                  value={memberForm.name}
+                  onChange={e => setMemberForm({ ...memberForm, name: e.target.value })}
+                  placeholder="Contoh: Ahmad Fadilah"
+                  className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-sm focus:outline-none focus:border-[#5A5A40]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Tingkat Kelas</label>
+                  <input
+                    type="text"
+                    value={memberForm.classGrade}
+                    onChange={e => setMemberForm({ ...memberForm, classGrade: e.target.value })}
+                    placeholder="Contoh: Kelas 11 MIPA 1"
+                    className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-sm focus:outline-none focus:border-[#5A5A40]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Jabatan / Posisi</label>
+                  <select
+                    value={memberForm.role}
+                    onChange={e => setMemberForm({ ...memberForm, role: e.target.value as EskulMember['role'] })}
+                    className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-sm focus:outline-none focus:border-[#5A5A40]"
+                  >
+                    <option value="Ketua">Ketua Eskul</option>
+                    <option value="Wakil Ketua">Wakil Ketua</option>
+                    <option value="Sekretaris">Sekretaris</option>
+                    <option value="Bendahara">Bendahara</option>
+                    <option value="Koordinator">Koordinator Bidang</option>
+                    <option value="Anggota">Anggota Aktif</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#2D2D2A] mb-1">Kontak / No. WA (Opsional)</label>
+                <input
+                  type="text"
+                  value={memberForm.contact}
+                  onChange={e => setMemberForm({ ...memberForm, contact: e.target.value })}
+                  placeholder="Contoh: 08123456789"
+                  className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-sm focus:outline-none focus:border-[#5A5A40]"
+                />
+              </div>
+
+              <MediaUploadField
+                label="Foto Profil Anggota (Opsional)"
+                mediaType="image"
+                value={memberForm.photoUrl}
+                onChange={url => setMemberForm({ ...memberForm, photoUrl: url })}
+                helperText="Upload foto profil (opsional). Jika dikosongkan, inisial nama akan otomatis digunakan."
+              />
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#E0E0D8]">
+                <button
+                  type="button"
+                  onClick={() => setIsMemberModalOpen(false)}
+                  className="px-4 py-2 bg-[#E0E0D8] hover:bg-[#D0D0C8] text-xs font-bold rounded-xl cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 bg-[#5A5A40] hover:bg-[#484833] text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-md cursor-pointer"
+                >
+                  {editingMember ? 'Simpan Perubahan' : 'Simpan Anggota'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 🔹 MODAL 4: UBAH TIKTOK ESKUL (Admin Kelas & Admin Utama) */}
+      {isEditingTikTok && selectedEskul && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fadeIn">
+          <div className="relative w-full max-w-md bg-white border border-[#E0E0D8] rounded-[32px] shadow-2xl p-6 sm:p-7 text-[#2D2D2A]">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E0E0D8] mb-4">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-black text-white">
+                  <TikTokIcon className="w-4 h-4 text-white" />
+                </div>
+                <div>
+                  <h3 className="font-serif text-lg font-bold text-[#2D2D2A]">
+                    Akun TikTok Eskul
+                  </h3>
+                  <p className="text-xs text-[#8E8E85]">{selectedEskul.name}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsEditingTikTok(false)}
+                className="text-[#8E8E85] hover:text-[#2D2D2A] p-1.5 rounded-xl hover:bg-[#F5F5F0] cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveTikTok} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-[#2D2D2A] mb-1.5">
+                  Tautan / URL Akun TikTok Eskul
+                </label>
+                <input
+                  type="url"
+                  value={tiktokInput}
+                  onChange={e => setTiktokInput(e.target.value)}
+                  placeholder="https://www.tiktok.com/@nama_eskul"
+                  className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-[#2D2D2A] text-sm focus:border-[#5A5A40] focus:outline-none"
+                  autoFocus
+                />
+                <p className="text-[11px] text-[#8E8E85] mt-1.5">
+                  Tautan ini dapat diubah oleh Admin Kelas dan Admin Utama, dan tersinkron otomatis ke pusat data.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-[#E0E0D8]">
+                {selectedEskul.tiktokUrl && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      updateEskul(selectedEskul.id, { tiktokUrl: undefined });
+                      setIsEditingTikTok(false);
+                    }}
+                    className="px-3.5 py-2 text-xs font-bold text-[#8C4A32] hover:bg-[#8C4A32]/10 rounded-xl cursor-pointer mr-auto"
+                  >
+                    Hapus Link
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsEditingTikTok(false)}
+                  className="px-4 py-2 text-xs font-bold bg-[#E0E0D8] hover:bg-[#D0D0C8] text-[#2D2D2A] rounded-xl cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-2 px-5 py-2 bg-[#5A5A40] hover:bg-[#484833] text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-sm cursor-pointer active:scale-95 transition-all"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>Simpan Link</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 🔹 MODAL: PERMOHONAN BERGABUNG KE ESKUL (Siswa Submit Formulir) */}
+      {isJoinModalOpen && selectedEskul && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fadeIn">
+          <div className="relative w-full max-w-lg bg-white border border-[#E0E0D8] rounded-[32px] shadow-2xl p-6 sm:p-8 max-h-[90vh] overflow-y-auto text-[#2D2D2A]">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E0E0D8] mb-4">
+              <div className="space-y-1">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-[#5A5A40] bg-[#F5F5F0] px-2.5 py-0.5 rounded-full border border-[#E0E0D8]">
+                  Pendaftaran Anggota
+                </span>
+                <h3 className="font-serif text-xl sm:text-2xl font-bold text-[#2D2D2A]">
+                  Gabung ke {selectedEskul.name}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsJoinModalOpen(false)}
+                className="text-[#8E8E85] hover:text-[#2D2D2A] p-1.5 rounded-xl cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3.5 bg-[#FAF8F5] border border-[#E0E0D8] rounded-2xl mb-4 text-xs text-[#5A5A40] space-y-1">
+              <p className="font-bold text-[#2D2D2A]">Proses Konfirmasi Admin Eskul:</p>
+              <p className="text-[11px] text-[#8E8E85] leading-relaxed">
+                Setelah mengirim formulir, tunggu konfirmasi terima/tolak dari <strong>Admin {selectedEskul.name}</strong>. Siswa yang diterima dapat mengirim pesan obrolan dan namanya langsung terdaftar di data OSIS/Eskul sekolah.
+              </p>
+            </div>
+
+            <form onSubmit={handleJoinSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-[#2D2D2A] mb-1">
+                  Nama Lengkap Siswa *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={joinForm.studentName}
+                  onChange={e => setJoinForm({ ...joinForm, studentName: e.target.value })}
+                  placeholder="Masukkan nama lengkap Anda..."
+                  className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-sm text-[#2D2D2A] focus:outline-none focus:border-[#5A5A40]"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] mb-1">
+                    Tingkat / Kelas *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={joinForm.classGrade}
+                    onChange={e => setJoinForm({ ...joinForm, classGrade: e.target.value })}
+                    placeholder="Contoh: Kelas 10 A"
+                    className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-sm text-[#2D2D2A] focus:outline-none focus:border-[#5A5A40]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-[#2D2D2A] mb-1">
+                    NIS / NISN (Opsional)
+                  </label>
+                  <input
+                    type="text"
+                    value={joinForm.nis}
+                    onChange={e => setJoinForm({ ...joinForm, nis: e.target.value })}
+                    placeholder="Nomor Induk Siswa..."
+                    className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-sm text-[#2D2D2A] focus:outline-none focus:border-[#5A5A40]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#2D2D2A] mb-1">
+                  Nomor HP / WhatsApp / Kontak
+                </label>
+                <input
+                  type="text"
+                  value={joinForm.contact}
+                  onChange={e => setJoinForm({ ...joinForm, contact: e.target.value })}
+                  placeholder="08xxxxxxxxxx"
+                  className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-sm text-[#2D2D2A] focus:outline-none focus:border-[#5A5A40]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#2D2D2A] mb-1">
+                  Alasan & Motivasi Bergabung (Opsional)
+                </label>
+                <textarea
+                  rows={3}
+                  value={joinForm.reason}
+                  onChange={e => setJoinForm({ ...joinForm, reason: e.target.value })}
+                  placeholder="Ceritakan minat dan alasan Anda ingin bergabung dengan ekstrakurikuler ini..."
+                  className="w-full px-3.5 py-2.5 bg-[#F8F8F5] border border-[#E0E0D8] rounded-xl text-sm text-[#2D2D2A] focus:outline-none focus:border-[#5A5A40]"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-[#E0E0D8]">
+                <button
+                  type="button"
+                  onClick={() => setIsJoinModalOpen(false)}
+                  className="px-4 py-2.5 text-xs font-bold bg-[#E0E0D8] hover:bg-[#D0D0C8] text-[#2D2D2A] rounded-xl cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-sm cursor-pointer active:scale-95 transition-all"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  <span>Kirim Permohonan</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
